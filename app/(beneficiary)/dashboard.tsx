@@ -691,6 +691,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 20,
   },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 16,
+  },
   qrStatusCard: {
     marginBottom: 12,
     padding: 16,
