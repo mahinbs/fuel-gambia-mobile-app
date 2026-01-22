@@ -1,0 +1,16 @@
+node_modules
+.expo
+.expo-shared
+android
+ios
+*.log
+.DS_Store
+.env.local
+.env.*.local
+web-build
+dist
+build
+*.apk
+*.aab
+.vscode
+.idea
