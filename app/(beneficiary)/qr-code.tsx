@@ -18,7 +18,7 @@ import { Button } from '../../components/ui/Button';
 import { UserRole, TransactionMode } from '../../types';
 import { generateQRData } from '../../utils/qr';
 import { formatCurrency, formatDate } from '../../utils/format';
-import { COLOR_THEMES } from '../../utils/constants';
+import { COLOR_THEMES, FUEL_PRICES } from '../../utils/constants';
 import { Clipboard } from '../../utils/clipboard';
 
 const theme = COLOR_THEMES.BENEFICIARY;
@@ -91,9 +91,9 @@ export default function QRCodeScreen() {
         fuelType: currentPaymentIntent.fuelType,
         paidAmount: currentPaymentIntent.amount,
         expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        mode: TransactionMode.PAID,
+        mode: TransactionMode.PAID as const,
       };
-      const qrString = generateQRData(payload);
+      const qrString = generateQRData(payload as any);
       setQrData(qrString);
       setQrPayload(payload);
       
@@ -121,9 +121,9 @@ export default function QRCodeScreen() {
         fuelType: beneficiary?.fuelType || 'PETROL',
         remainingAmount: beneficiary?.remainingBalance ?? 0,
         expiry: beneficiary?.expiryDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        mode: TransactionMode.SUBSIDY,
+        mode: TransactionMode.SUBSIDY as const,
       };
-      const qrString = generateQRData(payload);
+      const qrString = generateQRData(payload as any);
       setQrData(qrString);
       setQrPayload(payload);
       
@@ -256,9 +256,9 @@ export default function QRCodeScreen() {
             <View style={styles.warningContent}>
               <Ionicons name="information-circle" size={20} color="#FF9500" />
               <View style={styles.warningText}>
-                <Text style={styles.warningTitle}>Zero Balance</Text>
+                <Text style={styles.infoText}>This code isn&apos;t valid yet. Complete payment to activate.</Text>
                 <Text style={styles.warningMessage}>
-                  Your balance is zero. You can still generate a QR code, but you'll need to purchase fuel first.
+                  Your balance is zero. You can still generate a QR code, but you&apos;ll need to purchase fuel first.
                 </Text>
               </View>
             </View>
@@ -327,6 +327,30 @@ export default function QRCodeScreen() {
             style={{ width: '100%' }}
           />
         </View>
+
+        <Card style={styles.instructionsCard}>
+          <Text style={styles.instructionsTitle}>Purchase Summary</Text>
+          <View style={styles.summaryRow}>
+             <Text style={styles.infoLabel}>Amount</Text>
+             <Text style={styles.infoValue}>
+               {formatCurrency(
+                 qrPayload.mode === TransactionMode.PAID
+                   ? qrPayload.paidAmount
+                   : qrPayload.remainingAmount
+               )}
+             </Text>
+          </View>
+          <View style={styles.summaryRow}>
+             <Text style={styles.infoLabel}>Fuel Type</Text>
+             <Text style={styles.infoValue}>{qrPayload.fuelType}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+             <Text style={styles.infoLabel}>Estimated Volume</Text>
+             <Text style={styles.infoValue}>
+               {((qrPayload.mode === TransactionMode.PAID ? qrPayload.paidAmount : qrPayload.remainingAmount) / (FUEL_PRICES as any)[qrPayload.fuelType]).toFixed(2)} {qrPayload.fuelType === 'BUTANE' ? 'KG' : 'L'}
+             </Text>
+          </View>
+        </Card>
 
         <Card style={styles.instructionsCard}>
           <Text style={styles.instructionsTitle}>How to use</Text>
@@ -403,6 +427,12 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     lineHeight: 20,
   },
+  infoText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF9500',
+    marginBottom: 4,
+  },
   qrCard: {
     marginBottom: 24,
     padding: 20,
@@ -475,7 +505,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 20,
   },
-  backButton: {
-    marginTop: 16,
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
 });

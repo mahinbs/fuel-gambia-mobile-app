@@ -6,6 +6,7 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +16,7 @@ import { Button } from '../../components/ui/Button';
 import { formatCurrency, formatDate } from '../../utils/format';
 import { VerificationStatus } from '../../types';
 import { Loading } from '../../components/ui/Loading';
-import { COLOR_THEMES } from '../../utils/constants';
+import { COLOR_THEMES, FUEL_PRICES } from '../../utils/constants';
 
 // Use the same color theme as attendant dashboard
 const theme = COLOR_THEMES.ATTENDANT;
@@ -144,7 +145,7 @@ export default function BeneficiaryDashboard() {
               <View style={styles.alertText}>
                 <Text style={styles.alertTitle}>Verification Pending</Text>
                 <Text style={styles.alertMessage}>
-                  Your documents are under review. You'll be notified once approved.
+                  Your documents are under review. You&apos;ll be notified once approved.
                 </Text>
               </View>
             </View>
@@ -179,6 +180,37 @@ export default function BeneficiaryDashboard() {
 
         {isApproved && (
           <>
+            {/* Products Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Buy Fuel</Text>
+              <View style={styles.productsGrid}>
+                {(['PETROL', 'DIESEL', 'KEROSENE', 'BUTANE'] as const).map((type) => (
+                  <TouchableOpacity
+                    key={type}
+                    style={styles.productCard}
+                    onPress={() => router.push({
+                      pathname: '/(beneficiary)/purchase',
+                      params: { fuelType: type }
+                    })}
+                  >
+                    <Card style={styles.productCardInner}>
+                      <Ionicons
+                        name={type === 'PETROL' ? 'flame' : type === 'DIESEL' ? 'water' : type === 'KEROSENE' ? 'flask' : 'bonfire'}
+                        size={32}
+                        color={type === 'PETROL' ? '#FF9500' : theme.primary}
+                      />
+                      <Text style={styles.productName}>
+                        {type.charAt(0) + type.slice(1).toLowerCase()}
+                      </Text>
+                      <Text style={styles.productPrice}>
+                        {(FUEL_PRICES as any)[type]} GMD/L
+                      </Text>
+                    </Card>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             {/* Monthly Allocation Card */}
             <Card style={[styles.allocationCard, { backgroundColor: theme.secondary }]}>
               <View style={styles.allocationHeader}>
@@ -369,10 +401,41 @@ export default function BeneficiaryDashboard() {
   );
 }
 
+const { width } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F2F2F7',
+  },
+  section: {
+    paddingHorizontal: 20,
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  productsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
+  },
+  productCard: {
+    width: (width - 52) / 2,
+  },
+  productCardInner: {
+    padding: 16,
+    alignItems: 'center',
+    borderRadius: 16,
+    gap: 8,
+  },
+  productName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  productPrice: {
+    fontSize: 12,
+    color: '#8E8E93',
   },
   pendingBanner: {
     margin: 20,
@@ -452,9 +515,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   alertCard: {
-    margin: 20,
-    marginTop: -15,
-    marginBottom: 20,
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 12,
     padding: 20,
     borderRadius: 16,
     backgroundColor: '#FFF4E6',
@@ -496,9 +559,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   allocationCard: {
-    margin: 20,
-    marginTop: -15,
-    marginBottom: 20,
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 12,
     padding: 24,
     borderRadius: 20,
   },

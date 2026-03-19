@@ -24,15 +24,19 @@ export default function Index() {
   }
 
   if (!isAuthenticated || !user) {
-    return <Redirect href="/(auth)/signup" />;
+    return <Redirect href="/(auth)/login" />;
   }
 
   // Redirect based on user role and beneficiary status
   if (user.role === UserRole.USER) {
+    // Basic verification check
+    if (!user.name || !user.phoneNumber) {
+       // Should not happen if initialized from auth, but protect against incomplete profiles
+       return <Redirect href="/(auth)/signup" />;
+    }
+
     // Check if beneficiary status is set
     // Note: beneficiary-selection appears in login flow after OTP verification
-    // If isBeneficiary is undefined, it means user hasn't selected yet (shouldn't happen after login)
-    // But if it does, redirect to customer dashboard as fallback
     if (user.isBeneficiary === undefined) {
       // Fallback: go to customer dashboard
       return <Redirect href="/(customer)/dashboard" />;
@@ -40,26 +44,18 @@ export default function Index() {
     // Redirect based on beneficiary status
     if (user.isBeneficiary) {
       // For beneficiaries, check verification status
-      // Note: Document upload is only part of signup flow, not login
-      // If no beneficiary data exists during login, redirect to dashboard
       if (!beneficiary) {
-        // During login, if no beneficiary data, go to dashboard
-        // User can access dashboard and see their status
         return <Redirect href="/(beneficiary)/dashboard" />;
       }
       
       // Check verification status
       if (beneficiary.verificationStatus === VerificationStatus.APPROVED) {
-        // Approved - can access dashboard
         return <Redirect href="/(beneficiary)/dashboard" />;
       } else if (beneficiary.verificationStatus === VerificationStatus.PENDING) {
-        // Pending - allow dashboard access but show verification status page first
         return <Redirect href="/(beneficiary)/verification-status" />;
       } else if (beneficiary.verificationStatus === VerificationStatus.REJECTED) {
-        // Rejected - show verification status
         return <Redirect href="/(beneficiary)/verification-status" />;
       } else {
-        // Unknown status - redirect to dashboard (not document upload)
         return <Redirect href="/(beneficiary)/dashboard" />;
       }
     } else {
@@ -69,6 +65,6 @@ export default function Index() {
   } else if (user.role === UserRole.ATTENDANT) {
     return <Redirect href="/(attendant)/dashboard" />;
   } else {
-    return <Redirect href="/(auth)/signup" />;
+    return <Redirect href="/(auth)/login" />;
   }
 }

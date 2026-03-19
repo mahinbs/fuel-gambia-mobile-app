@@ -78,6 +78,12 @@ export default function AttendantLayout() {
           href: null, // Hide from tabs
         }}
       />
+      <Tabs.Screen
+        name="cash-sale"
+        options={{
+          href: null, // Hide from tabs
+        }}
+      />
     </Tabs>
   );
 }

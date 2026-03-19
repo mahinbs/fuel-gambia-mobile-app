@@ -72,6 +72,12 @@ export default function CustomerLayout() {
           href: null, // Hide from tabs
         }}
       />
+      <Tabs.Screen
+        name="my-coupons"
+        options={{
+          href: null, // Hide from tabs
+        }}
+      />
     </Tabs>
   );
 }

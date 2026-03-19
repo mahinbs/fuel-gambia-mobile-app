@@ -28,7 +28,7 @@ export default function ProfileScreen() {
       setLoading(true);
       await logout();
       // Navigate to auth screen after logout
-      router.replace('/(auth)/signup');
+      router.replace('/(auth)/login');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {

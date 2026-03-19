@@ -62,18 +62,43 @@ export default function CouponValidationScreen() {
 
         <Card style={styles.detailsCard}>
           <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>User Name</Text>
+            <Text style={styles.detailValue}>{scannedQR.userName || 'Unknown User'}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>User Tag</Text>
+            <View style={[
+              styles.tagBadge,
+              { backgroundColor: scannedQR.userType === 'BENEFICIARY' ? '#E3F2FD' : '#F2F2F7' }
+            ]}>
+              <Text style={[
+                styles.tagText,
+                { color: scannedQR.userType === 'BENEFICIARY' ? theme.primary : '#8E8E93' }
+              ]}>
+                {scannedQR.userType || 'NORMAL'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Mode</Text>
             <Text style={styles.detailValue}>{scannedQR.mode}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Fuel Type</Text>
-            <Text style={styles.detailValue}>{scannedQR.fuelType}</Text>
+            <View style={styles.fuelTypeRow}>
+              <Ionicons
+                name={scannedQR.fuelType === 'PETROL' ? 'flame' : 'water'}
+                size={18}
+                color={scannedQR.fuelType === 'PETROL' ? '#FF9500' : theme.primary}
+              />
+              <Text style={styles.detailValue}>{scannedQR.fuelType}</Text>
+            </View>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>
               {isSubsidy ? 'Remaining Amount' : 'Paid Amount'}
             </Text>
-            <Text style={styles.detailValue}>{formatCurrency(amount)}</Text>
+            <Text style={[styles.detailValue, styles.amountText]}>{formatCurrency(amount)}</Text>
           </View>
           {scannedQR.expiry && (
             <View style={styles.detailRow}>
@@ -126,29 +151,55 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   detailsCard: {
-    marginBottom: 24,
-    padding: 20,
+    marginBottom: 32,
+    padding: 24,
+    borderRadius: 24,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: 20,
   },
   detailLabel: {
     fontSize: 14,
     color: '#8E8E93',
+    fontWeight: '500',
   },
   detailValue: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#000000',
     textTransform: 'capitalize',
   },
+  tagBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  fuelTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  amountText: {
+    fontSize: 18,
+    color: theme.secondary,
+  },
   proceedButton: {
-    marginBottom: 12,
+    marginBottom: 16,
+    height: 56,
+    borderRadius: 16,
   },
   scanButton: {
     marginTop: 8,
+    height: 56,
+    borderRadius: 16,
   },
   emptyContainer: {
     flex: 1,

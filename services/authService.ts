@@ -4,7 +4,7 @@ import { Storage } from '../utils/storage';
 import { STORAGE_KEYS } from '../utils/constants';
 
 export const authService = {
-  async sendOTP(phoneNumber: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  async sendOTP(phone: string): Promise<{ success: boolean; message?: string; error?: string }> {
     // Mock implementation
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -16,10 +16,10 @@ export const authService = {
     });
     
     // Real implementation would be:
-    // return apiClient.post('/auth/send-otp', { phoneNumber });
+    // return apiClient.post('/auth/send-otp', { phone });
   },
 
-  async verifyOTP(phoneNumber: string, otp: string): Promise<AuthResponse | null> {
+  async verifyOTP(phone: string, otp: string): Promise<AuthResponse | null> {
     // Mock implementation
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -29,10 +29,11 @@ export const authService = {
         
         const mockUser: User = {
           id: '1',
-          phoneNumber,
           role: selectedRole,
           name: signupData?.name || 'John Doe',
-          email: signupData?.email || undefined,
+          phoneNumber: phone,
+          isBeneficiary: signupData?.isBeneficiary,
+          paymentMethods: selectedRole === UserRole.USER ? ['Wallet', 'Credit Card'] : [],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };

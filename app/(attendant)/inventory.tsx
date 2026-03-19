@@ -150,7 +150,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
   },
   header: {
     marginBottom: 24,

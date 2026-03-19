@@ -18,8 +18,8 @@ import { STORAGE_KEYS } from '../../utils/constants';
 
 export default function OTPScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ phoneNumber: string; fromSignup?: string }>();
-  const phoneNumber = params.phoneNumber || '';
+  const params = useLocalSearchParams<{ phone: string; fromSignup?: string }>();
+  const phone = params.phone || '';
   const fromSignup = params.fromSignup === 'true';
   const { login } = useAuthStore();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -54,7 +54,7 @@ export default function OTPScreen() {
 
     setLoading(true);
     try {
-      const result = await authService.verifyOTP(phoneNumber, otpString);
+      const result = await authService.verifyOTP(phone, otpString);
       if (result && result.user) {
         login(result.user, result.token);
         Storage.set(STORAGE_KEYS.ONBOARDING_COMPLETE, true);
@@ -64,23 +64,16 @@ export default function OTPScreen() {
         
         try {
           if (fromSignup) {
-            // Signup flow: if user is USER and beneficiary status is not set, show selection screen
-            if (result.user.role === 'USER' && result.user.isBeneficiary === undefined) {
-              router.replace({
-                pathname: '/(auth)/beneficiary-selection',
-                params: { fromSignup: 'true' }
-              });
+            // Signup flow: if user is a beneficiary, go to document upload
+            if (result.user.role === 'USER' && result.user.isBeneficiary) {
+              router.replace('/(beneficiary)/document-upload');
             } else {
-              // Attendant or user with beneficiary status already set - go to dashboard
+              // Regular user or attendant - go to dashboard
               router.replace('/');
             }
           } else {
-            // Login flow: always show beneficiary-selection for USER role if status is undefined
-            if (result.user.role === 'USER' && result.user.isBeneficiary === undefined) {
-              router.replace('/(auth)/beneficiary-selection');
-            } else {
-              router.replace('/');
-            }
+            // Login flow: go to dashboard
+            router.replace('/');
           }
         } catch (navError) {
           console.error('Navigation error:', navError);
@@ -99,7 +92,7 @@ export default function OTPScreen() {
   };
 
   const handleResend = async () => {
-    await authService.sendOTP(phoneNumber);
+    await authService.sendOTP(phone);
     Alert.alert('Success', 'OTP resent successfully');
   };
 
@@ -113,7 +106,7 @@ export default function OTPScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Enter OTP</Text>
             <Text style={styles.subtitle}>
-              We sent a 6-digit code to {phoneNumber}
+              We sent a 6-digit code to {phone}
             </Text>
           </View>
 
@@ -121,7 +114,7 @@ export default function OTPScreen() {
             {otp.map((digit, index) => (
               <TextInput
                 key={index}
-                ref={(ref) => (inputRefs.current[index] = ref)}
+                ref={(ref) => { inputRefs.current[index] = ref; }}
                 style={styles.otpInput}
                 value={digit}
                 onChangeText={(value) => handleOtpChange(value, index)}

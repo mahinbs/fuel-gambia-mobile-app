@@ -54,10 +54,11 @@ export const beneficiaryService = {
             role: 'BENEFICIARY' as any,
             name: userData.name || userData.fullName || 'Beneficiary',
             verificationStatus: verificationStatus,
-            monthlyAllocation: verificationStatus === VerificationStatus.APPROVED ? 2000 : 0,
-            remainingBalance: verificationStatus === VerificationStatus.APPROVED ? 1500 : 0,
+            monthlyAllocation: 5000,
+            remainingBalance: Storage.get<number>('mock_beneficiary_balance') || 5000,
             fuelType: 'PETROL' as any,
             expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            isBeneficiary: true as const,
             createdAt: userData.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
@@ -80,6 +81,7 @@ export const beneficiaryService = {
                 remainingBalance: 0,
                 fuelType: 'PETROL' as any,
                 expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                isBeneficiary: true as const,
                 createdAt: userData.createdAt || new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
               };

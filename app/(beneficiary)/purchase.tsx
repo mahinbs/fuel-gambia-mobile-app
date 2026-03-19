@@ -7,7 +7,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,7 +19,7 @@ import { useBeneficiaryStore } from '../../store';
 import { fuelPurchaseSchema } from '../../utils/validation';
 import { formatCurrency } from '../../utils/format';
 import { calculateLiters } from '../../utils/qr';
-import { COLOR_THEMES } from '../../utils/constants';
+import { COLOR_THEMES, FUEL_PRICES } from '../../utils/constants';
 
 const theme = COLOR_THEMES.BENEFICIARY;
 
@@ -27,8 +27,9 @@ type PurchaseFormData = z.infer<typeof fuelPurchaseSchema>;
 
 export default function BeneficiaryPurchaseScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ fuelType: string }>();
   const { beneficiary, updateBalance } = useBeneficiaryStore();
-  const [selectedFuelType, setSelectedFuelType] = useState<'PETROL' | 'DIESEL'>('PETROL');
+  const [selectedFuelType, setSelectedFuelType] = useState<string>(params.fuelType || 'PETROL');
   const [isLoading, setIsLoading] = useState(false);
 
   const {
@@ -46,27 +47,45 @@ export default function BeneficiaryPurchaseScreen() {
   });
 
   React.useEffect(() => {
-    setValue('fuelType', selectedFuelType);
+    if (params.fuelType) {
+      setSelectedFuelType(params.fuelType);
+    }
+  }, [params.fuelType]);
+
+  React.useEffect(() => {
+    setValue('fuelType', selectedFuelType as any);
   }, [selectedFuelType, setValue]);
 
   const amount = watch('amount');
-  const liters = amount > 0 ? calculateLiters(amount, selectedFuelType) : 0;
-  const pricePerLiter = selectedFuelType === 'PETROL' ? 65 : 68;
-  const hasBalance = beneficiary && beneficiary.remainingBalance > 0;
-  const canDeductFromBalance = hasBalance && amount <= beneficiary.remainingBalance;
+  const liters = amount > 0 ? calculateLiters(amount, selectedFuelType as any) : 0;
+  const pricePerLiter = (FUEL_PRICES as any)[selectedFuelType] || 0;
+  const hasSubsidizedBalance = beneficiary && beneficiary.remainingBalance > 0;
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
 
   const onSubmit = async (data: PurchaseFormData) => {
+    if (!selectedPaymentMethod) {
+      Alert.alert('Error', 'Please select a payment method');
+      return;
+    }
+    
     setIsLoading(true);
-    // Create payment intent and navigate to payment
-    // For now, we'll navigate directly to payment page
-    // In real app, this would create a payment intent
+    
+    // Check if using subsidized balance
+    if (selectedPaymentMethod === 'Coupon' && data.amount > (beneficiary?.remainingBalance || 0)) {
+       Alert.alert('Insufficient Balance', 'Coupon balance is insufficient for this amount.');
+       setIsLoading(false);
+       return;
+    }
+
     setTimeout(() => {
       setIsLoading(false);
       router.push({
-        pathname: '/(beneficiary)/payment',
+        pathname: '/(beneficiary)/qr-code',
         params: {
           amount: data.amount.toString(),
-          fuelType: data.fuelType,
+          fuelType: selectedFuelType,
+          paymentMethod: selectedPaymentMethod,
+          success: 'true'
         },
       });
     }, 500);
@@ -102,54 +121,49 @@ export default function BeneficiaryPurchaseScreen() {
           </Card>
         )}
 
-        <View style={styles.fuelTypeSection}>
-          <Text style={styles.sectionTitle}>Fuel Type</Text>
-          <View style={styles.fuelTypeOptions}>
-            <TouchableOpacity
-              style={[
-                styles.fuelTypeCard,
-                selectedFuelType === 'PETROL' && styles.fuelTypeCardActive,
-              ]}
-              onPress={() => setSelectedFuelType('PETROL')}
-            >
-              <Ionicons
-                name="flame"
-                size={32}
-                color={selectedFuelType === 'PETROL' ? '#FF9500' : '#8E8E93'}
-              />
-              <Text
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Payment Method</Text>
+          <View style={styles.paymentMethodsContainer}>
+            {hasSubsidizedBalance && (
+              <TouchableOpacity
                 style={[
-                  styles.fuelTypeText,
-                  selectedFuelType === 'PETROL' && styles.fuelTypeTextActive,
+                  styles.paymentMethodCard,
+                  selectedPaymentMethod === 'Coupon' && styles.paymentMethodCardActive,
                 ]}
+                onPress={() => setSelectedPaymentMethod('Coupon')}
               >
-                Petrol
-              </Text>
-              <Text style={styles.fuelTypePrice}>65 GMD/L</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.fuelTypeCard,
-                selectedFuelType === 'DIESEL' && styles.fuelTypeCardActive,
-              ]}
-              onPress={() => setSelectedFuelType('DIESEL')}
-            >
-              <Ionicons
-                name="water"
-                size={32}
-                color={selectedFuelType === 'DIESEL' ? theme.primary : '#8E8E93'}
-              />
-              <Text
+                <Ionicons 
+                  name={selectedPaymentMethod === 'Coupon' ? "radio-button-on" : "radio-button-off"} 
+                  size={20} 
+                  color={selectedPaymentMethod === 'Coupon' ? theme.primary : "#8E8E93"} 
+                />
+                <Text style={[
+                  styles.paymentMethodText,
+                  selectedPaymentMethod === 'Coupon' && styles.paymentMethodTextActive
+                ]}>Subsidized Coupon Balance</Text>
+              </TouchableOpacity>
+            )}
+            {/* Fallback to other methods if they were stored in user profile */}
+            {['Wallet', 'Bank Account'].map((method) => (
+              <TouchableOpacity
+                key={method}
                 style={[
-                  styles.fuelTypeText,
-                  selectedFuelType === 'DIESEL' && styles.fuelTypeTextActive,
+                  styles.paymentMethodCard,
+                  selectedPaymentMethod === method && styles.paymentMethodCardActive,
                 ]}
+                onPress={() => setSelectedPaymentMethod(method)}
               >
-                Diesel
-              </Text>
-              <Text style={styles.fuelTypePrice}>68 GMD/L</Text>
-            </TouchableOpacity>
+                <Ionicons 
+                  name={selectedPaymentMethod === method ? "radio-button-on" : "radio-button-off"} 
+                  size={20} 
+                  color={selectedPaymentMethod === method ? theme.primary : "#8E8E93"} 
+                />
+                <Text style={[
+                  styles.paymentMethodText,
+                  selectedPaymentMethod === method && styles.paymentMethodTextActive
+                ]}>{method}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
@@ -345,6 +359,34 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: 8,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  paymentMethodsContainer: {
+    gap: 12,
+  },
+  paymentMethodCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    gap: 12,
+  },
+  paymentMethodCardActive: {
+    borderColor: theme.primary,
+    backgroundColor: '#F0F8FF',
+  },
+  paymentMethodText: {
+    fontSize: 16,
+    color: '#8E8E93',
+  },
+  paymentMethodTextActive: {
+    color: theme.primary,
+    fontWeight: '600',
   },
   emptyContainer: {
     flex: 1,

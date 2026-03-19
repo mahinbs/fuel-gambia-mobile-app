@@ -18,6 +18,8 @@ export const QR_EXPIRY_HOURS = {
 export const FUEL_PRICES = {
   PETROL: 65, // GMD per liter
   DIESEL: 68, // GMD per liter
+  KEROSENE: 60, // GMD per liter
+  BUTANE: 75, // GMD per kg or L
 } as const;
 
 export const LOW_STOCK_THRESHOLD = 1000; // liters

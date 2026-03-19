@@ -6,6 +6,7 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +29,7 @@ export default function ProfileScreen() {
       setLoading(true);
       await logout();
       // Navigate to auth screen after logout
-      router.replace('/(auth)/signup');
+      router.replace('/(auth)/login');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -52,31 +53,43 @@ export default function ProfileScreen() {
         </View>
 
         <Card style={styles.card}>
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={() => Alert.alert('Profile', 'Edit profile functionality coming soon')}
+          >
             <View style={[styles.menuIconContainer, { backgroundColor: theme.secondary + '20' }]}>
               <Ionicons name="person-outline" size={24} color={theme.primary} />
             </View>
             <Text style={styles.menuText}>Edit Profile</Text>
             <Ionicons name="chevron-forward" size={24} color="#8E8E93" />
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem}>
+ 
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={() => Alert.alert('Security', 'Change password functionality coming soon')}
+          >
             <View style={[styles.menuIconContainer, { backgroundColor: theme.secondary + '20' }]}>
               <Ionicons name="lock-closed-outline" size={24} color={theme.primary} />
             </View>
             <Text style={styles.menuText}>Change Password</Text>
             <Ionicons name="chevron-forward" size={24} color="#8E8E93" />
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem}>
+ 
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={() => Alert.alert('Settings', 'Notification settings coming soon')}
+          >
             <View style={[styles.menuIconContainer, { backgroundColor: theme.secondary + '20' }]}>
               <Ionicons name="notifications-outline" size={24} color={theme.primary} />
             </View>
             <Text style={styles.menuText}>Notification Settings</Text>
             <Ionicons name="chevron-forward" size={24} color="#8E8E93" />
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem}>
+ 
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={() => Alert.alert('Help', 'Help & Support coming soon')}
+          >
             <View style={[styles.menuIconContainer, { backgroundColor: theme.secondary + '20' }]}>
               <Ionicons name="help-circle-outline" size={24} color={theme.primary} />
             </View>

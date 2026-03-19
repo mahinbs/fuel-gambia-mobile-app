@@ -1,5 +1,4 @@
-import { apiClient } from './api';
-import { Inventory } from '../types';
+import { Inventory, FuelType } from '../types';
 
 export const inventoryService = {
   async getInventory(stationId: string): Promise<Inventory | null> {
@@ -23,7 +22,7 @@ export const inventoryService = {
 
   async updateInventory(
     stationId: string,
-    fuelType: 'PETROL' | 'DIESEL',
+    fuelType: FuelType,
     liters: number
   ): Promise<boolean> {
     // Mock implementation

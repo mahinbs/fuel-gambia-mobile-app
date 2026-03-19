@@ -111,6 +111,53 @@ export default function VerificationStatusScreen() {
     }
   };
 
+  const renderActionSection = () => {
+    switch (beneficiary.verificationStatus) {
+      case VerificationStatus.APPROVED:
+        return (
+          <View style={styles.actionContainer}>
+            <Button
+              title="Go to Dashboard"
+              onPress={() => router.replace('/(beneficiary)/dashboard')}
+              style={styles.dashboardButton}
+            />
+          </View>
+        );
+      case VerificationStatus.PENDING:
+        return (
+          <View style={styles.actionContainer}>
+            <Text style={styles.waitingText}>
+              Please wait while we review your documents. You&apos;ll be notified once verification is complete.
+            </Text>
+            <Button
+              title="Verify"
+              onPress={handleVerify}
+              loading={verifying}
+              style={StyleSheet.flatten([styles.verifyButton, { backgroundColor: theme.secondary }])}
+            />
+            <Button
+              title="Go to Dashboard"
+              onPress={() => router.push('/(beneficiary)/dashboard')}
+              variant="outline"
+              style={StyleSheet.flatten([styles.dashboardButton, { borderColor: theme.primary }])}
+            />
+          </View>
+        );
+      case VerificationStatus.REJECTED:
+        return (
+          <View style={styles.actionContainer}>
+            <Button
+              title="Upload New Documents"
+              onPress={() => router.push('/(beneficiary)/document-upload')}
+              style={StyleSheet.flatten([styles.uploadButton, { backgroundColor: theme.primary }])}
+            />
+          </View>
+        );
+      default:
+        return null; // Or a default action if needed
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -130,58 +177,14 @@ export default function VerificationStatusScreen() {
             </Text>
           </View>
           {beneficiary.departmentName && (
-            <View style={styles.detailRow}>
+            <View style={StyleSheet.flatten([styles.detailRow, { borderBottomWidth: 0 }])}>
               <Text style={styles.detailLabel}>Department</Text>
-              <Text style={styles.detailValue}>{beneficiary.departmentName}</Text>
+              <Text style={styles.noteText}>We&apos;ve sent a notification to the government officer.</Text>
             </View>
           )}
         </Card>
 
-        {beneficiary.verificationStatus === VerificationStatus.APPROVED && (
-          <View style={styles.actionContainer}>
-            <Button
-              title="Go to Dashboard"
-              onPress={() => router.replace('/(beneficiary)/dashboard')}
-              style={styles.dashboardButton}
-            />
-          </View>
-        )}
-
-        {beneficiary.verificationStatus === VerificationStatus.PENDING && (
-          <View style={styles.actionContainer}>
-            <Text style={styles.waitingText}>
-              Please wait while we review your documents. You'll be notified once verification is complete.
-            </Text>
-            <Button
-              title="Verify"
-              onPress={handleVerify}
-              loading={verifying}
-              style={[styles.verifyButton, { backgroundColor: theme.secondary }]}
-            />
-            <Button
-              title="Go to Dashboard"
-              onPress={() => router.replace('/(beneficiary)/dashboard')}
-              style={styles.dashboardButton}
-              variant="outline"
-            />
-          </View>
-        )}
-
-        {beneficiary.verificationStatus === VerificationStatus.REJECTED && (
-          <View style={styles.actionContainer}>
-            <Button
-              title="Verify"
-              onPress={handleVerify}
-              loading={verifying}
-              style={[styles.verifyButton, { backgroundColor: theme.secondary }]}
-            />
-            <Card style={styles.infoCard}>
-              <Text style={styles.infoText}>
-                Document upload is only available during signup. Please contact support for assistance with rejected documents.
-              </Text>
-            </Card>
-          </View>
-        )}
+        {renderActionSection()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -208,6 +211,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#000000',
     marginBottom: 8,
+  },
+  warningMessage: {
+    fontSize: 14,
+    color: '#8E8E93',
+    lineHeight: 20,
   },
   statusMessage: {
     fontSize: 16,
@@ -263,7 +271,6 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     textAlign: 'center',
     lineHeight: 20,
-    paddingHorizontal: 20,
   },
   infoCard: {
     marginTop: 12,
@@ -275,5 +282,10 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  noteText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginTop: 4,
   },
 });

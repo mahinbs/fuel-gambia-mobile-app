@@ -7,6 +7,8 @@ export enum UserRole {
 export enum FuelType {
   PETROL = 'PETROL',
   DIESEL = 'DIESEL',
+  KEROSENE = 'KEROSENE',
+  BUTANE = 'BUTANE',
 }
 
 export enum TransactionMode {
@@ -34,6 +36,11 @@ export interface User {
   role: UserRole;
   name?: string;
   email?: string;
+  address?: string;
+  dob?: string;
+  sex?: 'Male' | 'Female' | 'Other';
+  paymentMethods?: string[];
+  institutionCode?: string; // For beneficiaries only
   isBeneficiary?: boolean; // Track if user is a fuel beneficiary
   createdAt: string;
   updatedAt: string;
@@ -61,6 +68,8 @@ export interface Attendant extends User {
 // QR Code Interfaces
 export interface SubsidyQRPayload {
   userId: string;
+  userName?: string;
+  userType?: 'NORMAL' | 'BENEFICIARY';
   couponId: string;
   fuelType: FuelType;
   remainingAmount: number;
@@ -70,6 +79,8 @@ export interface SubsidyQRPayload {
 
 export interface PaidQRPayload {
   transactionId: string;
+  userName?: string;
+  userType?: 'NORMAL' | 'BENEFICIARY';
   fuelType: FuelType;
   paidAmount: number;
   expiry: string;

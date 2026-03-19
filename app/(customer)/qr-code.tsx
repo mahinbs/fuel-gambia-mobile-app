@@ -11,21 +11,28 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuthStore, useCustomerStore } from '../../store';
+import { useAuthStore, useCustomerStore, useBeneficiaryStore } from '../../store';
 import { QRCode } from '../../components/QRCode';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { UserRole, TransactionMode } from '../../types';
 import { generateQRData } from '../../utils/qr';
 import { formatCurrency, formatDate } from '../../utils/format';
-import { COLOR_THEMES } from '../../utils/constants';
+import { COLOR_THEMES, FUEL_PRICES } from '../../utils/constants';
 import { Clipboard } from '../../utils/clipboard';
 
 const theme = COLOR_THEMES.USER;
 
 export default function QRCodeScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ qrId?: string }>();
+  const params = useLocalSearchParams<{ 
+    qrId?: string;
+    amount?: string;
+    fuelType?: string;
+    paymentMethod?: string;
+    success?: string;
+    mode?: string;
+  }>();
   const { user } = useAuthStore();
   const { currentPaymentIntent, saveQRCode, qrCodes } = useCustomerStore();
   const [qrData, setQrData] = useState<string>('');
@@ -46,17 +53,17 @@ export default function QRCodeScreen() {
   }, [params.qrId, qrCodes]);
 
   useEffect(() => {
-    if (currentPaymentIntent?.id && !params.qrId) {
+    if ((currentPaymentIntent?.id || params.success === 'true') && !params.qrId) {
       hasGeneratedRef.current = false;
     }
-  }, [currentPaymentIntent?.id, params.qrId]);
+  }, [currentPaymentIntent?.id, params.qrId, params.success]);
 
   useEffect(() => {
     if (!hasGeneratedRef.current && !params.qrId) {
       generateQR();
       hasGeneratedRef.current = true;
     }
-  }, [user, currentPaymentIntent, params.qrId]);
+  }, [user, currentPaymentIntent, params.qrId, params.success, params.mode]);
 
   const generateQR = () => {
     if (!user) {
@@ -64,18 +71,39 @@ export default function QRCodeScreen() {
       return;
     }
 
-    // Generate QR from payment intent (paid purchase)
-    if (currentPaymentIntent && currentPaymentIntent.status === 'SUCCESS') {
-      const transactionId = currentPaymentIntent.transactionId || `TXN-${Date.now()}`;
-      const payload = {
-        transactionId: transactionId,
-        fuelType: currentPaymentIntent.fuelType,
-        paidAmount: currentPaymentIntent.amount,
-        expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        mode: TransactionMode.PAID,
-      };
+    // Generate QR from payment intent or URL params (paid purchase or subsidy)
+    const isSuccess = currentPaymentIntent?.status === 'SUCCESS' || params.success === 'true';
+    const amount = currentPaymentIntent?.amount || parseFloat(params.amount || '0');
+    const fuelType = currentPaymentIntent?.fuelType || params.fuelType || 'PETROL';
+    const mode = params.mode || (currentPaymentIntent as any)?.mode || TransactionMode.PAID;
+    
+    if (isSuccess && amount > 0) {
+      const transactionId = currentPaymentIntent?.transactionId || `TXN-${Date.now()}`;
+      
+      let payload: any;
+      if (mode === TransactionMode.SUBSIDY || mode === 'SUBSIDY') {
+        payload = {
+          userId: user.id,
+          userName: user.name,
+          userType: 'BENEFICIARY',
+          couponId: `COUPON-${Date.now()}`,
+          fuelType: fuelType,
+          remainingAmount: amount, // For subsidy, this is the amount being redeemed now
+          expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          mode: TransactionMode.SUBSIDY,
+        };
+      } else {
+        payload = {
+          transactionId: transactionId,
+          fuelType: fuelType,
+          paidAmount: amount,
+          expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          mode: TransactionMode.PAID,
+        };
+      }
+
       const qrString = generateQRData(payload);
-      console.log('Generated paid QR code');
+      console.log('Generated QR code for mode:', mode);
       setQrData(qrString);
       setQrPayload(payload);
       
@@ -170,7 +198,7 @@ export default function QRCodeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -178,75 +206,93 @@ export default function QRCodeScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#000000" />
           </TouchableOpacity>
-          <Text style={styles.title}>Paid Fuel QR Code</Text>
-          <TouchableOpacity
-            style={styles.scannerButton}
-            onPress={handleScanQR}
-          >
-            <Ionicons name="scan" size={24} color={theme.primary} />
-          </TouchableOpacity>
+          <Text style={styles.title}>Fuel Coupon</Text>
+          <View style={{ width: 44 }} />
         </View>
 
-        <Card style={styles.qrCard}>
-          <QRCode payload={qrPayload} size={250} />
-        </Card>
+        <View style={styles.qrSection}>
+          <Card style={styles.qrCard}>
+            <View style={styles.qrContainer}>
+              <QRCode payload={qrPayload} size={240} />
+            </View>
+            <View style={styles.qrBadge}>
+              <Ionicons name="checkmark-circle" size={18} color={theme.secondary} />
+              <Text style={styles.qrBadgeText}>Valid for 24 Hours</Text>
+            </View>
+          </Card>
+        </View>
 
-        <Card style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Amount</Text>
-            <Text style={styles.infoValue}>
-              {formatCurrency(currentPaymentIntent?.amount || 0)}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Fuel Type</Text>
-            <Text style={styles.infoValue}>
-              {currentPaymentIntent?.fuelType || 'PETROL'}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Expires</Text>
-            <Text style={styles.infoValue}>
-              {formatDate(
-                new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-              )}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Mode</Text>
-            <Text style={styles.infoValue}>PAID</Text>
-          </View>
-        </Card>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Coupon Details</Text>
+          <Card style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <View>
+                <Text style={styles.infoLabel}>{params.mode === 'SUBSIDY' ? 'Subsidy Amount' : 'Amount Paid'}</Text>
+                <Text style={styles.infoValue}>
+                  {formatCurrency(currentPaymentIntent?.amount || qrPayload.paidAmount || qrPayload.remainingAmount || 0)}
+                </Text>
+              </View>
+              <View style={styles.divider} />
+              <View>
+                <Text style={styles.infoLabel}>Fuel Type</Text>
+                <Text style={styles.infoValue}>
+                  {currentPaymentIntent?.fuelType || qrPayload.fuelType || 'PETROL'}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.infoRowBottom}>
+              <View>
+                <Text style={styles.infoLabel}>Estimated Liters</Text>
+                <Text style={styles.infoValueLiters}>
+                  {((currentPaymentIntent?.amount || qrPayload.paidAmount || 0) / (FUEL_PRICES as any)[currentPaymentIntent?.fuelType || qrPayload.fuelType || 'PETROL']).toFixed(2)} L
+                </Text>
+              </View>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusBadgeText}>ACTIVE</Text>
+              </View>
+            </View>
+          </Card>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Instructions</Text>
+          <Card style={styles.instructionsCard}>
+            <View style={styles.instructionStep}>
+              <View style={[styles.stepNumber, { backgroundColor: theme.primary + '15' }]}>
+                <Text style={[styles.stepNumberText, { color: theme.primary }]}>1</Text>
+              </View>
+              <Text style={styles.instructionText}>Show this QR code to the station attendant</Text>
+            </View>
+            <View style={styles.instructionStep}>
+              <View style={[styles.stepNumber, { backgroundColor: theme.primary + '15' }]}>
+                <Text style={[styles.stepNumberText, { color: theme.primary }]}>2</Text>
+              </View>
+              <Text style={styles.instructionText}>Attendant will scan and confirm the amount</Text>
+            </View>
+            <View style={styles.instructionStep}>
+              <View style={[styles.stepNumber, { backgroundColor: theme.primary + '15' }]}>
+                <Text style={[styles.stepNumberText, { color: theme.primary }]}>3</Text>
+              </View>
+              <Text style={styles.instructionText}>Fuel will be dispensed and receipt issued</Text>
+            </View>
+          </Card>
+        </View>
 
         <View style={styles.actions}>
           <Button
-            title="Copy QR Data"
-            onPress={handleCopy}
+            title="Download Coupon"
+            onPress={() => Alert.alert('Coming Soon', 'Feature in development')}
+            style={styles.actionButton}
+          />
+          <Button
+            title="Back to Home"
+            onPress={() => router.push('/(customer)/dashboard')}
             variant="outline"
-            style={{ width: '100%' }}
-          />
-          <Button
-            title="Scan QR Code"
-            onPress={handleScanQR}
-            style={{ width: '100%', backgroundColor: theme.primary }}
-          />
-          <Button
-            title="Regenerate"
-            onPress={generateQR}
-            variant="secondary"
-            style={{ width: '100%' }}
+            style={styles.secondaryButton}
           />
         </View>
-
-        <Card style={styles.instructionsCard}>
-          <Text style={styles.instructionsTitle}>How to use</Text>
-          <Text style={styles.instructionsText}>
-            1. Show this QR code to the fuel station attendant{'\n'}
-            2. The attendant will scan the code{'\n'}
-            3. Select the amount of fuel to dispense{'\n'}
-            4. Receive your fuel and receipt
-          </Text>
-        </Card>
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -258,105 +304,198 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
   },
   scrollContent: {
-    padding: 20,
-    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 32,
+    paddingBottom: 40,
   },
   header: {
-    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 32,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   title: {
-    flex: 1,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: '#000000',
-    textAlign: 'center',
   },
-  scannerButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
+  qrSection: {
     alignItems: 'center',
+    marginBottom: 32,
   },
   qrCard: {
-    marginBottom: 24,
-    padding: 20,
+    padding: 32,
+    borderRadius: 32,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+  },
+  qrContainer: {
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+  },
+  qrBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 8,
+  },
+  qrBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3A3A3C',
+  },
+  section: {
+    marginBottom: 32,
+    width: '100%',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginBottom: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   infoCard: {
-    width: '100%',
-    marginBottom: 24,
-    padding: 20,
+    padding: 24,
+    borderRadius: 24,
   },
   infoRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 20,
+  },
+  divider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#E5E5EA',
   },
   infoLabel: {
-    fontSize: 14,
+    fontSize: 12,
+    fontWeight: '600',
     color: '#8E8E93',
+    marginBottom: 4,
+    textTransform: 'uppercase',
   },
   infoValue: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#000000',
+  },
+  infoRowBottom: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F2F2F7',
+  },
+  infoValueLiters: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: theme.primary,
+  },
+  statusBadge: {
+    backgroundColor: theme.secondary + '20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: theme.secondary,
+  },
+  instructionsCard: {
+    padding: 20,
+    borderRadius: 24,
+    gap: 16,
+  },
+  instructionStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  stepNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepNumberText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  instructionText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#3A3A3C',
+    fontWeight: '500',
+    lineHeight: 20,
   },
   actions: {
     width: '100%',
     gap: 12,
-    marginBottom: 24,
   },
-  instructionsCard: {
-    width: '100%',
-    padding: 20,
+  actionButton: {
+    height: 56,
+    borderRadius: 16,
   },
-  instructionsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 12,
-  },
-  instructionsText: {
-    fontSize: 14,
-    color: '#8E8E93',
-    lineHeight: 22,
+  secondaryButton: {
+    height: 56,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#E5E5EA',
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    minHeight: 400,
+    padding: 32,
+    minHeight: 500,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: '#000000',
-    marginTop: 16,
+    marginTop: 20,
     marginBottom: 8,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#8E8E93',
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
+    marginBottom: 32,
+    lineHeight: 22,
+    paddingHorizontal: 20,
   },
   emptyActions: {
     width: '100%',
     gap: 12,
-    marginTop: 24,
-  },
-  actionButton: {
-    width: '100%',
   },
 });

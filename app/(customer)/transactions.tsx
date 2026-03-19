@@ -6,8 +6,10 @@ import {
   FlatList,
   SafeAreaView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useAuthStore, useBeneficiaryStore, useCustomerStore, useAttendantStore } from '../../store';
 import { Card } from '../../components/ui/Card';
 import { formatCurrency, formatDateTime } from '../../utils/format';
@@ -18,6 +20,7 @@ import { COLOR_THEMES } from '../../utils/constants';
 const theme = COLOR_THEMES.USER;
 
 export default function TransactionHistoryScreen() {
+  const router = useRouter();
   const { user } = useAuthStore();
   const { transactions: beneficiaryTransactions, fetchTransactions: fetchBeneficiaryTransactions } =
     useBeneficiaryStore();
@@ -56,11 +59,16 @@ export default function TransactionHistoryScreen() {
     return (
       <Card style={styles.transactionCard}>
         <View style={styles.transactionContent}>
-          <View style={styles.transactionIcon}>
+          <View
+            style={[
+              styles.transactionIconContainer,
+              { backgroundColor: isSubsidy ? '#E3F2FD' : '#F2F2F7' },
+            ]}
+          >
             <Ionicons
-              name={isSubsidy ? 'gift' : 'card'}
+              name={isSubsidy ? 'gift' : item.fuelType === 'PETROL' ? 'flame' : 'water'}
               size={24}
-              color={isSubsidy ? theme.secondary : theme.primary}
+              color={isSubsidy ? theme.primary : item.fuelType === 'PETROL' ? '#FF9500' : theme.primary}
             />
           </View>
           <View style={styles.transactionInfo}>
@@ -68,7 +76,7 @@ export default function TransactionHistoryScreen() {
               {item.stationName || 'Fuel Station'}
             </Text>
             <Text style={styles.transactionDetails}>
-              {item.fuelType} • {item.liters.toFixed(2)}L • {item.mode}
+              {item.liters.toFixed(2)}L • {item.fuelType}
             </Text>
             <Text style={styles.transactionDate}>
               {formatDateTime(item.createdAt)}
@@ -81,10 +89,17 @@ export default function TransactionHistoryScreen() {
             <View
               style={[
                 styles.statusBadge,
-                item.status === 'SUCCESS' && styles.statusSuccess,
+                item.status === 'SUCCESS' ? styles.statusSuccess : styles.statusPending,
               ]}
             >
-              <Text style={styles.statusText}>{item.status}</Text>
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: item.status === 'SUCCESS' ? theme.secondary : '#FF9500' },
+                ]}
+              >
+                {item.status}
+              </Text>
             </View>
           </View>
         </View>
@@ -95,12 +110,28 @@ export default function TransactionHistoryScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Transaction History</Text>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#000000" />
+        </TouchableOpacity>
+        <Text style={styles.title}>History</Text>
+        <TouchableOpacity 
+          style={styles.filterButton}
+          onPress={() => Alert.alert('Filter', 'Filter options coming soon')}
+        >
+          <Ionicons name="options-outline" size={24} color={theme.primary} />
+        </TouchableOpacity>
       </View>
+      
       {transactions.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="receipt-outline" size={64} color="#8E8E93" />
-          <Text style={styles.emptyText}>No transactions yet</Text>
+          <View style={[styles.emptyIconContainer, { backgroundColor: '#FFFFFF' }]}>
+            <Ionicons name="receipt-outline" size={64} color="#C7C7CC" />
+          </View>
+          <Text style={styles.emptyTitle}>No orders yet</Text>
+          <Text style={styles.emptyText}>Your transaction history will appear here once you make a purchase.</Text>
         </View>
       ) : (
         <FlatList
@@ -110,6 +141,7 @@ export default function TransactionHistoryScreen() {
           contentContainerStyle={styles.listContent}
           refreshing={loading}
           onRefresh={loadTransactions}
+          showsVerticalScrollIndicator={false}
         />
       )}
     </SafeAreaView>
@@ -122,80 +154,141 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
   },
   header: {
-    padding: 20,
-    paddingBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   title: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '700',
     color: '#000000',
   },
+  filterButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
   listContent: {
-    padding: 20,
-    paddingTop: 0,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   transactionCard: {
-    marginBottom: 12,
-    padding: 16,
+    marginBottom: 16,
+    padding: 18,
+    borderRadius: 24,
   },
   transactionContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  transactionIcon: {
-    marginRight: 12,
+  transactionIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   transactionInfo: {
     flex: 1,
   },
   transactionStation: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#000000',
     marginBottom: 4,
   },
   transactionDetails: {
     fontSize: 14,
     color: '#8E8E93',
-    marginBottom: 4,
+    fontWeight: '500',
   },
   transactionDate: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#C7C7CC',
+    fontWeight: '600',
+    marginTop: 4,
   },
   transactionAmountContainer: {
     alignItems: 'flex-end',
   },
   transactionAmount: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '800',
     color: '#000000',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    backgroundColor: '#E5E5EA',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
   statusSuccess: {
     backgroundColor: '#E3F2FD',
   },
+  statusPending: {
+    backgroundColor: '#FFF3E0',
+  },
   statusText: {
     fontSize: 10,
-    fontWeight: '600',
-    color: '#000000',
+    fontWeight: '800',
     textTransform: 'uppercase',
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 40,
+    paddingBottom: 100,
+  },
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginBottom: 12,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#8E8E93',
-    marginTop: 16,
+    textAlign: 'center',
+    lineHeight: 22,
+    fontWeight: '500',
   },
 });

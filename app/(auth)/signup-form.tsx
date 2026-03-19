@@ -25,13 +25,26 @@ import { authService } from '../../services/authService';
 const userSignupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   phoneNumber: z.string().min(1, 'Phone number is required'),
-  email: z.string().email('Invalid email address').optional().or(z.literal('')),
+  email: z.string().email('Invalid email address'),
+  address: z.string().min(5, 'Address is required'),
+  dob: z.string().min(1, 'Date of Birth is required'),
+  sex: z.enum(['Male', 'Female', 'Other']),
+  useCoupon: z.boolean().default(false),
+  isBeneficiary: z.boolean().default(false),
+  institutionCode: z.string().optional(),
+  paymentMethods: z.array(z.string()).min(1, 'Select at least one payment method'),
+}).refine(data => !data.useCoupon || (data.useCoupon && data.institutionCode && data.institutionCode.length > 0), {
+  message: "Institution code is required when using a coupon",
+  path: ["institutionCode"]
 });
 
 const attendantSignupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   phoneNumber: z.string().min(1, 'Phone number is required'),
-  email: z.string().email('Invalid email address').optional().or(z.literal('')),
+  email: z.string().email('Invalid email address'),
+  address: z.string().min(5, 'Address is required'),
+  dob: z.string().min(1, 'Date of Birth is required'),
+  sex: z.enum(['Male', 'Female', 'Other']),
   stationId: z.string().min(1, 'Station ID is required'),
   stationName: z.string().min(1, 'Station name is required'),
 });
@@ -52,6 +65,13 @@ export default function SignupFormScreen() {
       name: '',
       phoneNumber: '',
       email: '',
+      address: '',
+      dob: '',
+      sex: 'Male',
+      useCoupon: false,
+      isBeneficiary: false,
+      institutionCode: '',
+      paymentMethods: [],
     },
   });
 
@@ -61,6 +81,9 @@ export default function SignupFormScreen() {
       name: '',
       phoneNumber: '',
       email: '',
+      address: '',
+      dob: '',
+      sex: 'Male',
       stationId: '',
       stationName: '',
     },
@@ -74,12 +97,12 @@ export default function SignupFormScreen() {
       Storage.set('signup_data', data);
 
       // Send OTP for verification
-      const result = await authService.sendOTP(data.phoneNumber);
+      const result = await authService.sendOTP(data.email);
       if (result.success) {
         router.push({
           pathname: '/(auth)/otp',
           params: {
-            phoneNumber: data.phoneNumber,
+            email: data.email,
             fromSignup: 'true',
             role,
           },
@@ -118,7 +141,7 @@ export default function SignupFormScreen() {
 
           <Card style={styles.formCard}>
             <Controller
-              control={form.control}
+              control={form.control as any}
               name="name"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
@@ -127,14 +150,14 @@ export default function SignupFormScreen() {
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
-                  error={form.formState.errors.name?.message}
+                  error={(form.formState.errors as any).name?.message}
                   autoCapitalize="words"
                 />
               )}
             />
 
             <Controller
-              control={form.control}
+              control={form.control as any}
               name="phoneNumber"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
@@ -143,7 +166,7 @@ export default function SignupFormScreen() {
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
-                  error={form.formState.errors.phoneNumber?.message}
+                  error={(form.formState.errors as any).phoneNumber?.message}
                   keyboardType="phone-pad"
                   autoCapitalize="none"
                 />
@@ -151,21 +174,147 @@ export default function SignupFormScreen() {
             />
 
             <Controller
-              control={form.control}
+              control={form.control as any}
               name="email"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Email (Optional)"
+                  label="Email"
                   placeholder="your.email@example.com"
                   value={value || ''}
                   onChangeText={onChange}
                   onBlur={onBlur}
-                  error={form.formState.errors.email?.message}
+                  error={(form.formState.errors as any).email?.message}
                   keyboardType="email-address"
                   autoCapitalize="none"
                 />
               )}
             />
+
+            <Controller
+              control={form.control as any}
+              name="address"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label="Address"
+                  placeholder="Enter your address"
+                  value={(value as string) || ''}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={(form.formState.errors as any).address?.message}
+                />
+              )}
+            />
+
+            <View style={styles.row}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Controller
+                  control={form.control as any}
+                  name="dob"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <Input
+                      label="Date of Birth"
+                      placeholder="YYYY-MM-DD"
+                      value={(value as string) || ''}
+                      onChangeText={onChange}
+                      onBlur={onBlur}
+                      error={(form.formState.errors as any).dob?.message}
+                    />
+                  )}
+                />
+              </View>
+              <View style={{ flex: 1, marginLeft: 8 }}>
+                <Text style={styles.fieldLabel}>Sex</Text>
+                <View style={styles.sexContainer}>
+                  {['Male', 'Female'].map((option) => (
+                      <TouchableOpacity
+                        key={option}
+                        style={[
+                          styles.sexOption,
+                          (form.watch as any)('sex') === option && styles.sexOptionActive,
+                        ]}
+                        onPress={() => (form.setValue as any)('sex', option)}
+                      >
+                      <Text style={[
+                        styles.sexOptionText,
+                        (form.watch as any)('sex') === option && styles.sexOptionTextActive
+                      ]}>{option}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            {role === UserRole.USER && (
+              <>
+                <View style={styles.couponToggleContainer}>
+                  <Text style={styles.fieldLabel}>Do you use a coupon?</Text>
+                  <TouchableOpacity
+                    style={[styles.toggle, (form.watch as any)('useCoupon') && styles.toggleActive]}
+                    onPress={() => (form.setValue as any)('useCoupon', !(form.watch as any)('useCoupon'))}
+                  >
+                    <View style={[styles.toggleDot, (form.watch as any)('useCoupon') && styles.toggleDotActive]} />
+                  </TouchableOpacity>
+                </View>
+
+                {(form.watch as any)('useCoupon') && (
+                  <>
+                    <View style={styles.couponToggleContainer}>
+                      <Text style={styles.fieldLabel}>Are you a beneficiary?</Text>
+                      <TouchableOpacity
+                        style={[styles.toggle, (form.watch as any)('isBeneficiary') && styles.toggleActive]}
+                        onPress={() => (form.setValue as any)('isBeneficiary', !(form.watch as any)('isBeneficiary'))}
+                      >
+                        <View style={[styles.toggleDot, (form.watch as any)('isBeneficiary') && styles.toggleDotActive]} />
+                      </TouchableOpacity>
+                    </View>
+
+                    <Controller
+                      control={form.control as any}
+                      name="institutionCode"
+                      render={({ field: { onChange, onBlur, value } }) => (
+                        <Input
+                          label="Institution Code"
+                          placeholder="Enter your institution's code"
+                          value={(value as string) || ''}
+                          onChangeText={onChange}
+                          onBlur={onBlur}
+                          error={(form.formState.errors as any).institutionCode?.message}
+                          autoCapitalize="characters"
+                        />
+                      )}
+                    />
+                  </>
+                )}
+
+                <Text style={styles.fieldLabel}>Payment Methods (Select multiple)</Text>
+                <View style={styles.paymentMethodsContainer}>
+                  {['Bank Account', 'Wallet', 'Credit Card', 'Cash'].map((method) => {
+                    const selectedMethods = ((form.watch as any)('paymentMethods')) || [];
+                    const isSelected = selectedMethods.includes(method);
+                    return (
+                      <TouchableOpacity
+                        key={method}
+                        style={[styles.paymentMethodCard, isSelected && styles.paymentMethodCardActive]}
+                        onPress={() => {
+                          if (isSelected) {
+                            (form.setValue as any)('paymentMethods', selectedMethods.filter((m: string) => m !== method));
+                          } else {
+                            (form.setValue as any)('paymentMethods', [...selectedMethods, method]);
+                          }
+                        }}
+                      >
+                        <Ionicons 
+                          name={isSelected ? "checkbox" : "square-outline"} 
+                          size={20} 
+                          color={isSelected ? "#007AFF" : "#8E8E93"} 
+                        />
+                        <Text style={[styles.paymentMethodText, isSelected && styles.paymentMethodTextActive]}>{method}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
 
             {isAttendant && (
               <>
@@ -204,7 +353,7 @@ export default function SignupFormScreen() {
             )}
 
             <Button
-              title="Continue"
+              title="Register"
               onPress={form.handleSubmit(onSubmit)}
               loading={loading}
               style={styles.submitButton}
@@ -273,5 +422,97 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8E8E93',
     marginBottom: 16,
+  },
+  row: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 8,
+  },
+  sexContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sexOption: {
+    flex: 1,
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  sexOptionActive: {
+    borderColor: '#007AFF',
+    backgroundColor: '#F0F8FF',
+  },
+  sexOptionText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    fontWeight: '500',
+  },
+  sexOptionTextActive: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  couponToggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  toggle: {
+    width: 51,
+    height: 31,
+    borderRadius: 16,
+    backgroundColor: '#E5E5EA',
+    padding: 2,
+  },
+  toggleActive: {
+    backgroundColor: '#34C759',
+  },
+  toggleDot: {
+    width: 27,
+    height: 27,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+  },
+  toggleDotActive: {
+    transform: [{ translateX: 20 }],
+  },
+  paymentMethodsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 20,
+  },
+  paymentMethodCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    gap: 6,
+  },
+  paymentMethodCardActive: {
+    borderColor: '#007AFF',
+    backgroundColor: '#F0F8FF',
+  },
+  paymentMethodText: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+  paymentMethodTextActive: {
+    color: '#007AFF',
+    fontWeight: '600',
   },
 });

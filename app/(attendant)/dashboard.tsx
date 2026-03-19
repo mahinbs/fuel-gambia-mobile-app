@@ -6,6 +6,7 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { Button } from '../../components/ui/Button';
 import { Loading } from '../../components/ui/Loading';
 import { COLOR_THEMES } from '../../utils/constants';
 
+const { width } = Dimensions.get('window');
 const theme = COLOR_THEMES.ATTENDANT;
 
 export default function AttendantDashboard() {
@@ -66,34 +68,36 @@ export default function AttendantDashboard() {
           </View>
         </View>
 
-        {/* Scanner Card */}
-        <View style={styles.scannerContainer}>
-          <Card style={[styles.scannerCard, { backgroundColor: '#5856D6' }]}>
-            <View style={styles.scannerContent}>
-              <View style={styles.scannerIconContainer}>
-                <Ionicons name="qr-code" size={48} color="#FFFFFF" />
-              </View>
-              <View style={styles.scannerText}>
-                <Text style={styles.scannerTitle}>Scan QR Code</Text>
-                <Text style={styles.scannerSubtitle}>
-                  Scan customer QR code to validate and dispense fuel
-                </Text>
-              </View>
+        {/* Main Actions */}
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: theme.primary }]}
+            onPress={() => router.push('/(attendant)/scanner')}
+          >
+            <View style={styles.iconCircle}>
+              <Ionicons name="scan" size={32} color="#FFFFFF" />
             </View>
-            <Button
-              title="Open Scanner"
-              onPress={() => router.push('/(attendant)/scanner')}
-              style={styles.scannerButton}
-              textStyle={styles.scannerButtonText}
-            />
-          </Card>
+            <Text style={styles.actionTitle}>Scanner</Text>
+            <Text style={styles.actionSubtitle}>Scan QR Coupons</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: theme.secondary }]}
+            onPress={() => router.push('/(attendant)/cash-sale')}
+          >
+            <View style={styles.iconCircle}>
+              <Ionicons name="basket" size={32} color="#FFFFFF" />
+            </View>
+            <Text style={styles.actionTitle}>Cash Sales</Text>
+            <Text style={styles.actionSubtitle}>Record Direct Sales</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Inventory Status */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Inventory Status</Text>
           <View style={styles.inventoryContainer}>
-            <Card style={[styles.inventoryCard, isLowStock(inventory.petrolStock) && styles.lowStockCard]}>
+            <Card style={[styles.inventoryCard, isLowStock(inventory.petrolStock) ? styles.lowStockCard : {}]}>
               <View style={styles.inventoryHeader}>
                 <View style={[styles.inventoryIconContainer, { backgroundColor: '#FFF4E6' }]}>
                   <Ionicons name="flame" size={28} color="#FF9500" />
@@ -129,7 +133,7 @@ export default function AttendantDashboard() {
               )}
             </Card>
 
-            <Card style={[styles.inventoryCard, isLowStock(inventory.dieselStock) && styles.lowStockCard]}>
+            <Card style={[styles.inventoryCard, isLowStock(inventory.dieselStock) ? styles.lowStockCard : {}]}>
               <View style={styles.inventoryHeader}>
                 <View style={[styles.inventoryIconContainer, { backgroundColor: '#E3F2FD' }]}>
                   <Ionicons name="water" size={28} color={theme.primary} />
@@ -222,13 +226,6 @@ export default function AttendantDashboard() {
         <View style={styles.quickLinksContainer}>
           <TouchableOpacity
             style={styles.quickLink}
-            onPress={() => router.push('/(attendant)/scanner')}
-          >
-            <Ionicons name="scan" size={24} color={theme.primary} />
-            <Text style={[styles.quickLinkText, { color: theme.primary }]}>Scanner</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.quickLink}
             onPress={() => router.push('/(attendant)/transactions')}
           >
             <Ionicons name="receipt" size={24} color={theme.primary} />
@@ -301,50 +298,50 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  scannerContainer: {
-    paddingHorizontal: 20,
-    marginTop: -20,
-    marginBottom: 20,
-  },
-  scannerCard: {
-    padding: 24,
-    borderRadius: 20,
-  },
-  scannerContent: {
+  actionsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 24,
+    gap: 16,
   },
-  scannerIconContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  scannerText: {
+  actionCard: {
     flex: 1,
+    padding: 24,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
   },
-  scannerTitle: {
-    fontSize: 24,
+  actionTitle: {
+    fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginTop: 8,
   },
-  scannerSubtitle: {
-    fontSize: 14,
+  actionSubtitle: {
+    fontSize: 12,
     color: '#FFFFFF',
-    opacity: 0.9,
-    lineHeight: 20,
+    opacity: 0.8,
+    marginTop: 2,
   },
-  scannerButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+  cardTouchArea: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  scannerButtonText: {
-    color: '#000000',
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   section: {
     paddingHorizontal: 20,
@@ -488,6 +485,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     gap: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   quickLinkText: {
     fontSize: 12,
