@@ -27,8 +27,8 @@ const userSignupSchema = z.object({
   phoneNumber: z.string().min(1, 'Phone number is required'),
   email: z.string().email('Invalid email address'),
   address: z.string().min(5, 'Address is required'),
-  dob: z.string().min(1, 'Date of Birth is required'),
   sex: z.enum(['Male', 'Female', 'Other']),
+  idImage: z.string().min(1, 'ID Upload is required for KYC'),
   useCoupon: z.boolean().default(false),
   isBeneficiary: z.boolean().default(false),
   institutionCode: z.string().optional(),
@@ -43,8 +43,8 @@ const attendantSignupSchema = z.object({
   phoneNumber: z.string().min(1, 'Phone number is required'),
   email: z.string().email('Invalid email address'),
   address: z.string().min(5, 'Address is required'),
-  dob: z.string().min(1, 'Date of Birth is required'),
   sex: z.enum(['Male', 'Female', 'Other']),
+  idImage: z.string().min(1, 'ID Upload is required for KYC'),
   stationId: z.string().min(1, 'Station ID is required'),
   stationName: z.string().min(1, 'Station name is required'),
 });
@@ -66,8 +66,8 @@ export default function SignupFormScreen() {
       phoneNumber: '',
       email: '',
       address: '',
-      dob: '',
       sex: 'Male',
+      idImage: '',
       useCoupon: false,
       isBeneficiary: false,
       institutionCode: '',
@@ -82,8 +82,8 @@ export default function SignupFormScreen() {
       phoneNumber: '',
       email: '',
       address: '',
-      dob: '',
       sex: 'Male',
+      idImage: '',
       stationId: '',
       stationName: '',
     },
@@ -209,18 +209,22 @@ export default function SignupFormScreen() {
               <View style={{ flex: 1, marginRight: 8 }}>
                 <Controller
                   control={form.control as any}
-                  name="dob"
+                  name="idImage"
                   render={({ field: { onChange, onBlur, value } }) => (
-                    <Input
-                      label="Date of Birth"
-                      placeholder="YYYY-MM-DD"
-                      value={(value as string) || ''}
-                      onChangeText={onChange}
-                      onBlur={onBlur}
-                      error={(form.formState.errors as any).dob?.message}
-                    />
+                    <TouchableOpacity 
+                      style={[styles.uploadButton, (form.formState.errors as any).idImage && styles.uploadButtonError]}
+                      onPress={() => onChange('mock_id_image_url')}
+                    >
+                      <Ionicons name="camera" size={20} color={value ? "#34C759" : "#8E8E93"} />
+                      <Text style={styles.uploadButtonText}>
+                        {value ? 'ID Uploaded' : 'Upload ID'}
+                      </Text>
+                    </TouchableOpacity>
                   )}
                 />
+                {(form.formState.errors as any).idImage && (
+                  <p className="text-xs text-rose-500 mt-1">ID Upload is required</p>
+                )}
               </View>
               <View style={{ flex: 1, marginLeft: 8 }}>
                 <Text style={styles.fieldLabel}>Sex</Text>
@@ -513,6 +517,26 @@ const styles = StyleSheet.create({
   },
   paymentMethodTextActive: {
     color: '#007AFF',
+    fontWeight: '600',
+  },
+  uploadButton: {
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    gap: 8,
+    marginTop: 22,
+  },
+  uploadButtonError: {
+    borderColor: '#FF3B30',
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    color: '#000000',
     fontWeight: '600',
   },
 });
