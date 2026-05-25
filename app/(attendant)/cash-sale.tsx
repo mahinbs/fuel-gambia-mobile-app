@@ -37,13 +37,28 @@ export default function CashSaleScreen() {
   const [selectedFuelType, setSelectedFuelType] = useState<FuelType>(FuelType.PETROL);
 
   useEffect(() => {
-    if (!inventory) {
-      const stationId = (user && 'stationId' in user && (user as any).stationId) 
-        ? (user as any).stationId 
-        : 'station1';
-      fetchInventory(stationId);
+    if (!inventory && user && 'stationId' in user && (user as any).stationId) {
+      fetchInventory((user as any).stationId);
     }
   }, [user, inventory, fetchInventory]);
+
+  if (!user || !('stationId' in user) || !(user as any).stationId) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#000000" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Cash Sale</Text>
+        </View>
+        <Card style={{ margin: 20, padding: 24, alignItems: 'center' }}>
+          <Ionicons name="warning-outline" size={48} color="#8E8E93" style={{ marginBottom: 12 }} />
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#1C1C1E', marginBottom: 8 }}>No Station Assigned</Text>
+          <Text style={{ fontSize: 14, color: '#8E8E93', textAlign: 'center', lineHeight: 20 }}>You cannot record cash sales without an assigned station.</Text>
+        </Card>
+      </SafeAreaView>
+    );
+  }
 
   const {
     control,

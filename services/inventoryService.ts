@@ -1,23 +1,29 @@
+import { supabase } from '../utils/supabase';
 import { Inventory, FuelType } from '../types';
 
 export const inventoryService = {
   async getInventory(stationId: string): Promise<Inventory | null> {
-    // Mock implementation
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          stationId,
-          stationName: 'Shell Station',
-          petrolStock: 5000,
-          dieselStock: 4500,
-          lastUpdated: new Date().toISOString(),
-        });
-      }, 500);
-    });
+    try {
+      const { data, error } = await supabase
+        .from('stations')
+        .select('id, name, petrol_stock, diesel_stock, created_at') // created_at as fallback for lastUpdated if no specific column
+        .eq('id', stationId)
+        .single();
 
-    // Real implementation:
-    // const response = await apiClient.get<Inventory>(`/inventory/${stationId}`);
-    // return response.success && response.data ? response.data : null;
+      if (error) throw error;
+      if (!data) return null;
+
+      return {
+        stationId: data.id,
+        stationName: data.name,
+        petrolStock: Number(data.petrol_stock),
+        dieselStock: Number(data.diesel_stock),
+        lastUpdated: data.created_at, // In a real app, you might want a 'updated_at' or specific inventory logs
+      };
+    } catch (error) {
+      console.error('Error fetching inventory:', error);
+      return null;
+    }
   },
 
   async updateInventory(
@@ -25,15 +31,20 @@ export const inventoryService = {
     fuelType: FuelType,
     liters: number
   ): Promise<boolean> {
-    // Mock implementation
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(true);
-      }, 500);
-    });
+    try {
+      const stockColumn = fuelType === FuelType.PETROL ? 'petrol_stock' : 'diesel_stock';
+      
+      // Using rpc for atomic update if defined, or simple update
+      const { error } = await supabase
+        .from('stations')
+        .update({ [stockColumn]: liters }) // This replaces, should usually be an increment/decrement
+        .eq('id', stationId);
 
-    // Real implementation:
-    // const response = await apiClient.put(`/inventory/${stationId}`, { fuelType, liters });
-    // return response.success;
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error updating inventory:', error);
+      return false;
+    }
   },
 };

@@ -1,4 +1,4 @@
-import { apiClient } from './api';
+import { supabase } from '../utils/supabase';
 import { Transaction } from '../types';
 
 export const transactionService = {
@@ -7,68 +7,132 @@ export const transactionService = {
     endDate?: string;
     fuelType?: string;
     mode?: string;
+    userId?: string;
+    attendantId?: string;
   }): Promise<Transaction[]> {
-    // Mock implementation
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve([
-          {
-            id: '1',
-            userId: '1',
-            stationId: 'station1',
-            stationName: 'Shell Station',
-            fuelType: 'PETROL' as any,
-            amount: 500,
-            liters: 7.69,
-            mode: 'SUBSIDY' as any,
-            status: 'SUCCESS' as any,
-            createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          },
-          {
-            id: '2',
-            userId: '1',
-            stationId: 'station2',
-            stationName: 'Total Station',
-            fuelType: 'DIESEL' as any,
-            amount: 1000,
-            liters: 14.71,
-            mode: 'PAID' as any,
-            status: 'SUCCESS' as any,
-            createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          },
-        ]);
-      }, 500);
-    });
+    try {
+      let query = supabase
+        .from('transactions')
+        .select(`
+          *,
+          station:stations(name)
+        `)
+        .order('created_at', { ascending: false });
 
-    // Real implementation:
-    // const response = await apiClient.get<Transaction[]>('/transactions', filters);
-    // return response.success && response.data ? response.data : [];
+      if (filters?.userId) {
+        query = query.eq('user_id', filters.userId);
+      } else if (filters?.attendantId) {
+        query = query.eq('attendant_id', filters.attendantId);
+      } else {
+        // Default to current user if no filter
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (profile?.role === 'ATTENDANT') {
+            query = query.eq('attendant_id', user.id);
+          } else {
+            query = query.eq('user_id', user.id);
+          }
+        }
+      }
+
+      if (filters?.startDate) {
+        query = query.gte('created_at', filters.startDate);
+      }
+      if (filters?.endDate) {
+        query = query.lte('created_at', filters.endDate);
+      }
+      if (filters?.fuelType) {
+        query = query.eq('fuel_type', filters.fuelType);
+      }
+      if (filters?.mode) {
+        query = query.eq('mode', filters.mode);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      return (data || []).map(item => ({
+        id: item.id,
+        userId: item.user_id,
+        stationId: item.station_id,
+        stationName: (item as any).station?.name || 'Unknown Station',
+        fuelType: item.fuel_type,
+        amount: item.amount,
+        liters: item.liters,
+        mode: item.mode,
+        status: item.status,
+        createdAt: item.created_at,
+        updatedAt: item.created_at, // Supabase schema uses created_at
+      }));
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      return [];
+    }
   },
 
   async getTransactionById(id: string): Promise<Transaction | null> {
-    // Mock implementation
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          id,
-          userId: '1',
-          stationId: 'station1',
-          stationName: 'Shell Station',
-          fuelType: 'PETROL' as any,
-          amount: 500,
-          liters: 7.69,
-          mode: 'SUBSIDY' as any,
-          status: 'SUCCESS' as any,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      }, 500);
-    });
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select(`
+          *,
+          station:stations(name)
+        `)
+        .eq('id', id)
+        .single();
 
-    // Real implementation:
-    // const response = await apiClient.get<Transaction>(`/transactions/${id}`);
-    // return response.success && response.data ? response.data : null;
+      if (error) throw error;
+      if (!data) return null;
+
+      return {
+        id: data.id,
+        userId: data.user_id,
+        stationId: data.station_id,
+        stationName: (data as any).station?.name || 'Unknown Station',
+        fuelType: data.fuel_type,
+        amount: data.amount,
+        liters: data.liters,
+        mode: data.mode,
+        status: data.status,
+        createdAt: data.created_at,
+        updatedAt: data.created_at,
+      };
+    } catch (error) {
+      console.error('Error fetching transaction by ID:', error);
+      return null;
+    }
   },
+
+  async createTransaction(transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>): Promise<Transaction | null> {
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: transaction.userId,
+          station_id: transaction.stationId,
+          attendant_id: (transaction as any).attendantId,
+          fuel_type: transaction.fuelType,
+          amount: transaction.amount,
+          liters: transaction.liters,
+          mode: transaction.mode,
+          status: transaction.status,
+          qr_code: transaction.qrCode,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as any;
+    } catch (error) {
+      console.error('Error creating transaction:', error);
+      return null;
+    }
+  }
 };

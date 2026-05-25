@@ -1,118 +1,132 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   SafeAreaView,
+  Dimensions,
+  TouchableOpacity,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
 import { Ionicons } from '@expo/vector-icons';
+import { Storage } from '../../utils/storage';
+
+const { width } = Dimensions.get('window');
+
+interface Slide {
+  icon: string;
+  title: string;
+  description: string;
+  gradientColors: string[];
+}
+
+const slides: Slide[] = [
+  {
+    icon: 'water',
+    title: 'National Fuel Subsidies',
+    description: 'Empowering Gambian citizens and government departments with smart, digital fuel allocation and subsidy management.',
+    gradientColors: ['#007AFF', '#5856D6'],
+  },
+  {
+    icon: 'qr-code',
+    title: 'Digital QR Coupons',
+    description: 'Generate secure QR coupons instantly to pay for fuel at any station. Attendants scan and approve transactions in seconds.',
+    gradientColors: ['#5856D6', '#FF2D55'],
+  },
+  {
+    icon: 'wallet',
+    title: 'Smart Wallet Tracking',
+    description: 'Track fuel usage, monthly allocations, and remaining balances in real-time. Manage everything seamlessly on the go.',
+    gradientColors: ['#34C759', '#007AFF'],
+  },
+];
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ role: string }>();
-  const role = params.role || '';
+  const [activeIndex, setActiveIndex] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  const getOnboardingContent = () => {
-    switch (role) {
-      case 'USER':
-        return {
-          title: 'Welcome to Fuel Gambia!',
-          steps: [
-            {
-              icon: 'cart',
-              title: 'Purchase Fuel',
-              description: 'Select fuel type and amount',
-            },
-            {
-              icon: 'card',
-              title: 'Make Payment',
-              description: 'Pay securely using mobile money or card',
-            },
-            {
-              icon: 'qr-code',
-              title: 'Get QR Code',
-              description: 'Receive QR code after successful payment',
-            },
-            {
-              icon: 'car',
-              title: 'Redeem at Station',
-              description: 'Show QR code at any fuel station',
-            },
-          ],
-        };
-      case 'ATTENDANT':
-        return {
-          title: 'Welcome, Station Attendant!',
-          steps: [
-            {
-              icon: 'scan',
-              title: 'Scan QR Codes',
-              description: 'Use camera to scan customer QR codes',
-            },
-            {
-              icon: 'checkmark-circle',
-              title: 'Validate Coupon',
-              description: 'Verify QR code validity and expiry',
-            },
-            {
-              icon: 'water',
-              title: 'Dispense Fuel',
-              description: 'Enter amount and dispense fuel',
-            },
-            {
-              icon: 'receipt',
-              title: 'Generate Receipt',
-              description: 'Create transaction receipt for customer',
-            },
-          ],
-        };
-      default:
-        return { title: 'Welcome!', steps: [] };
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const scrollOffset = event.nativeEvent.contentOffset.x;
+    const index = Math.round(scrollOffset / width);
+    if (index !== activeIndex) {
+      setActiveIndex(index);
     }
   };
 
-  const content = getOnboardingContent();
+  const handleNext = () => {
+    if (activeIndex < slides.length - 1) {
+      scrollViewRef.current?.scrollTo({
+        x: (activeIndex + 1) * width,
+        animated: true,
+      });
+      setActiveIndex(activeIndex + 1);
+    } else {
+      handleComplete();
+    }
+  };
+
+  const handleSkip = () => {
+    handleComplete();
+  };
+
+  const handleComplete = () => {
+    Storage.set('has_seen_onboarding', true);
+    router.replace('/(auth)/login');
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.title}>{content.title}</Text>
-          <Text style={styles.subtitle}>
-            Follow these simple steps to get started
-          </Text>
-        </View>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
+          <Text style={styles.skipText}>Skip</Text>
+        </TouchableOpacity>
+      </View>
 
-        <View style={styles.stepsContainer}>
-          {content.steps.map((step, index) => (
-            <Card key={index} style={styles.stepCard}>
-              <View style={styles.stepContent}>
-                <View style={styles.stepIcon}>
-                  <Ionicons name={step.icon as any} size={32} color="#007AFF" />
-                </View>
-                <View style={styles.stepText}>
-                  <Text style={styles.stepTitle}>{step.title}</Text>
-                  <Text style={styles.stepDescription}>{step.description}</Text>
-                </View>
-                <Text style={styles.stepNumber}>{index + 1}</Text>
-              </View>
-            </Card>
+      <ScrollView
+        ref={scrollViewRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.scrollContainer}
+      >
+        {slides.map((slide, index) => (
+          <View key={index} style={styles.slide}>
+            <View style={[styles.iconContainer, { backgroundColor: slide.gradientColors[0] + '15' }]}>
+              <Ionicons name={slide.icon as any} size={80} color={slide.gradientColors[0]} />
+            </View>
+            
+            <Text style={styles.title}>{slide.title}</Text>
+            <Text style={styles.description}>{slide.description}</Text>
+          </View>
+        ))}
+      </ScrollView>
+
+      <View style={styles.footer}>
+        <View style={styles.dotsContainer}>
+          {slides.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.dot,
+                index === activeIndex ? styles.activeDot : null,
+              ]}
+            />
           ))}
         </View>
 
         <Button
-          title="Continue"
-          onPress={() => router.push({
-            pathname: '/(auth)/login',
-            params: { fromSignup: 'true' }
-          })}
-          style={styles.button}
+          title={activeIndex === slides.length - 1 ? 'Get Started' : 'Next'}
+          onPress={handleNext}
+          style={styles.actionButton}
         />
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -120,62 +134,73 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
-  },
-  scrollContent: {
-    padding: 20,
+    backgroundColor: '#FFFFFF',
   },
   header: {
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingHorizontal: 20,
+  },
+  skipButton: {
+    padding: 8,
+  },
+  skipText: {
+    fontSize: 16,
+    color: '#8E8E93',
+    fontWeight: '500',
+  },
+  scrollContainer: {
+    flexGrow: 1,
+  },
+  slide: {
+    width: width,
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 32,
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  iconContainer: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 40,
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#000000',
-    marginBottom: 8,
+    color: '#1C1C1E',
     textAlign: 'center',
+    marginBottom: 16,
   },
-  subtitle: {
+  description: {
     fontSize: 16,
     color: '#8E8E93',
     textAlign: 'center',
+    lineHeight: 24,
   },
-  stepsContainer: {
-    gap: 16,
-    marginBottom: 32,
-  },
-  stepCard: {
-    padding: 20,
-  },
-  stepContent: {
-    flexDirection: 'row',
+  footer: {
+    paddingHorizontal: 30,
+    paddingBottom: 40,
     alignItems: 'center',
   },
-  stepIcon: {
-    marginRight: 16,
+  dotsContainer: {
+    flexDirection: 'row',
+    marginBottom: 32,
+    gap: 8,
   },
-  stepText: {
-    flex: 1,
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E5E5EA',
   },
-  stepTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 4,
+  activeDot: {
+    width: 24,
+    backgroundColor: '#007AFF',
   },
-  stepDescription: {
-    fontSize: 14,
-    color: '#8E8E93',
-    lineHeight: 20,
-  },
-  stepNumber: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#007AFF',
-  },
-  button: {
-    marginTop: 16,
+  actionButton: {
+    width: '100%',
   },
 });

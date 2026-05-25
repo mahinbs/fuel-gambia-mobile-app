@@ -53,8 +53,22 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   initializeAuth: async () => {
     set({ isLoading: true });
-    const user = authService.getStoredUser();
+    await Storage.waitForLoading();
+    let user = authService.getStoredUser();
     const token = authService.getStoredToken();
+
+    if (user && token && user.role === UserRole.ATTENDANT && !user.stationId) {
+      try {
+        const stationId = await authService.populateStationId(user.id);
+        if (stationId) {
+          user = { ...user, stationId };
+          Storage.set(STORAGE_KEYS.USER_DATA, user);
+        }
+      } catch (err) {
+        console.error('Failed to auto-populate station ID during init:', err);
+      }
+    }
+
     set({
       user,
       token,

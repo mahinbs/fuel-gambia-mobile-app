@@ -6,6 +6,7 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
@@ -15,22 +16,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { useBeneficiaryStore } from '../../store';
-import { fuelPurchaseSchema } from '../../utils/validation';
+import { useBeneficiaryStore, useAuthStore } from '../../store';
 import { formatCurrency } from '../../utils/format';
 import { calculateLiters } from '../../utils/qr';
 import { COLOR_THEMES, FUEL_PRICES } from '../../utils/constants';
+import { transactionService } from '../../services/transactionService';
 
 const theme = COLOR_THEMES.BENEFICIARY;
 
-type PurchaseFormData = z.infer<typeof fuelPurchaseSchema>;
+const localPurchaseSchema = z.object({
+  fuelType: z.enum(['PETROL', 'DIESEL', 'KEROSENE', 'BUTANE']),
+  amount: z.number().min(0.01, 'Please enter a valid amount'),
+});
+
+type PurchaseFormData = z.infer<typeof localPurchaseSchema>;
 
 export default function BeneficiaryPurchaseScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ fuelType: string }>();
-  const { beneficiary, updateBalance } = useBeneficiaryStore();
+  const { user } = useAuthStore();
+  const { beneficiary, saveQRCode } = useBeneficiaryStore();
   const [selectedFuelType, setSelectedFuelType] = useState<string>(params.fuelType || 'PETROL');
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('Coupon');
 
   const {
     control,
@@ -39,7 +47,7 @@ export default function BeneficiaryPurchaseScreen() {
     setValue,
     formState: { errors },
   } = useForm<PurchaseFormData>({
-    resolver: zodResolver(fuelPurchaseSchema),
+    resolver: zodResolver(localPurchaseSchema),
     defaultValues: {
       fuelType: 'PETROL',
       amount: 0,
@@ -57,38 +65,103 @@ export default function BeneficiaryPurchaseScreen() {
   }, [selectedFuelType, setValue]);
 
   const amount = watch('amount');
-  const liters = amount > 0 ? calculateLiters(amount, selectedFuelType as any) : 0;
   const pricePerLiter = (FUEL_PRICES as any)[selectedFuelType] || 0;
-  const hasSubsidizedBalance = beneficiary && beneficiary.remainingBalance > 0;
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
+  
+  // Calculations based on payment method
+  const gmdAmount = selectedPaymentMethod === 'Coupon' ? amount * pricePerLiter : amount;
+  const liters = selectedPaymentMethod === 'Coupon' ? amount : (amount > 0 ? calculateLiters(amount, selectedFuelType as any) : 0);
+
+  const hasBalance = beneficiary && beneficiary.remainingBalance > 0;
+  const hasSubsidizedBalance = hasBalance;
 
   const onSubmit = async (data: PurchaseFormData) => {
     if (!selectedPaymentMethod) {
       Alert.alert('Error', 'Please select a payment method');
       return;
     }
+
+    if (!user) {
+      Alert.alert('Error', 'User profile not loaded');
+      return;
+    }
     
     setIsLoading(true);
     
     // Check if using subsidized balance
-    if (selectedPaymentMethod === 'Coupon' && data.amount > (beneficiary?.remainingBalance || 0)) {
-       Alert.alert('Insufficient Balance', 'Coupon balance is insufficient for this amount.');
-       setIsLoading(false);
-       return;
+    if (selectedPaymentMethod === 'Coupon') {
+      if (liters > (beneficiary?.remainingBalance || 0)) {
+         Alert.alert('Insufficient Quota', 'You do not have enough allocated quota for this purchase.');
+         setIsLoading(false);
+         return;
+      }
+    } else {
+      // Validate payment methods in currency GMD
+      if (data.amount < 100) {
+        Alert.alert('Invalid Amount', 'Minimum amount is 100 GMD.');
+        setIsLoading(false);
+        return;
+      }
     }
 
-    setTimeout(() => {
+    try {
+      const mode = selectedPaymentMethod === 'Coupon' ? 'SUBSIDY' : 'PAID';
+      const pMethod = selectedPaymentMethod === 'Coupon' ? 'COUPON' : (selectedPaymentMethod === 'Wallet' ? 'WALLET' : 'BANK_TRANSFER');
+      
+      const qrCodeToken = `QR_${mode}_${user.id}_${Date.now()}`;
+
+      // Insert pending transaction record in Supabase
+      const newTx = await transactionService.createTransaction({
+        userId: user.id,
+        fuelType: selectedFuelType as any,
+        amount: gmdAmount,
+        liters: liters,
+        mode: mode as any,
+        status: 'PENDING' as any,
+        qrCode: qrCodeToken,
+      });
+
+      if (!newTx) {
+        throw new Error('Failed to save pending transaction in database');
+      }
+
+      // Save QR code in local store cache
+      const payload = {
+        transactionId: newTx.id,
+        qrCodeToken: qrCodeToken,
+        userId: user.id,
+        userName: beneficiary?.name || user.name || 'User',
+        userType: 'BENEFICIARY' as const,
+        fuelType: selectedFuelType as any,
+        paidAmount: gmdAmount,
+        remainingAmount: liters,
+        expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        mode: mode as any,
+        paymentMethod: pMethod,
+      };
+
+      if (saveQRCode) {
+        saveQRCode({
+          id: qrCodeToken,
+          qrData: JSON.stringify(payload),
+          payload: payload,
+          status: 'PENDING',
+          createdAt: new Date().toISOString(),
+        });
+      }
+
       setIsLoading(false);
       router.push({
         pathname: '/(beneficiary)/qr-code',
         params: {
-          amount: data.amount.toString(),
-          fuelType: selectedFuelType,
-          paymentMethod: selectedPaymentMethod,
+          qrId: qrCodeToken,
           success: 'true'
         },
       });
-    }, 500);
+    } catch (err: any) {
+      console.error('Error initiating purchase:', err);
+      Alert.alert('Error', err.message || 'Failed to initiate purchase');
+      setIsLoading(false);
+    }
   };
 
   if (!beneficiary) {
@@ -105,16 +178,16 @@ export default function BeneficiaryPurchaseScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Purchase Fuel</Text>
-        <Text style={styles.subtitle}>Select fuel type and amount</Text>
+        <Text style={styles.subtitle}>Select payment method and quantity</Text>
 
         {hasBalance && (
           <Card style={[styles.balanceCard, { backgroundColor: theme.secondary }]}>
             <View style={styles.balanceContent}>
               <Ionicons name="wallet" size={24} color="#FFFFFF" />
               <View style={styles.balanceText}>
-                <Text style={styles.balanceLabel}>Available Balance</Text>
+                <Text style={styles.balanceLabel}>Remaining Allocation Quota</Text>
                 <Text style={styles.balanceValue}>
-                  {formatCurrency(beneficiary.remainingBalance)}
+                  {beneficiary.remainingBalance} L
                 </Text>
               </View>
             </View>
@@ -130,7 +203,10 @@ export default function BeneficiaryPurchaseScreen() {
                   styles.paymentMethodCard,
                   selectedPaymentMethod === 'Coupon' && styles.paymentMethodCardActive,
                 ]}
-                onPress={() => setSelectedPaymentMethod('Coupon')}
+                onPress={() => {
+                  setSelectedPaymentMethod('Coupon');
+                  setValue('amount', 0);
+                }}
               >
                 <Ionicons 
                   name={selectedPaymentMethod === 'Coupon' ? "radio-button-on" : "radio-button-off"} 
@@ -140,10 +216,9 @@ export default function BeneficiaryPurchaseScreen() {
                 <Text style={[
                   styles.paymentMethodText,
                   selectedPaymentMethod === 'Coupon' && styles.paymentMethodTextActive
-                ]}>Subsidized Coupon Balance</Text>
+                ]}>Government Subsidy</Text>
               </TouchableOpacity>
             )}
-            {/* Fallback to other methods if they were stored in user profile */}
             {['Wallet', 'Bank Account'].map((method) => (
               <TouchableOpacity
                 key={method}
@@ -151,7 +226,10 @@ export default function BeneficiaryPurchaseScreen() {
                   styles.paymentMethodCard,
                   selectedPaymentMethod === method && styles.paymentMethodCardActive,
                 ]}
-                onPress={() => setSelectedPaymentMethod(method)}
+                onPress={() => {
+                  setSelectedPaymentMethod(method);
+                  setValue('amount', 0);
+                }}
               >
                 <Ionicons 
                   name={selectedPaymentMethod === method ? "radio-button-on" : "radio-button-off"} 
@@ -165,6 +243,28 @@ export default function BeneficiaryPurchaseScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          {selectedPaymentMethod === 'Coupon' && (
+            <Card style={styles.subsidyDetailsCard}>
+              <Text style={styles.subsidyDetailsTitle}>Government Subsidy Details</Text>
+              <View style={styles.subsidyDetailsRow}>
+                <Text style={styles.subsidyDetailsLabel}>Allocated quota:</Text>
+                <Text style={styles.subsidyDetailsValue}>{beneficiary.monthlyAllocation} L</Text>
+              </View>
+              <View style={styles.subsidyDetailsRow}>
+                <Text style={styles.subsidyDetailsLabel}>Remaining quota:</Text>
+                <Text style={styles.subsidyDetailsValue}>{beneficiary.remainingBalance} L</Text>
+              </View>
+              <View style={styles.subsidyDetailsRow}>
+                <Text style={styles.subsidyDetailsLabel}>Department:</Text>
+                <Text style={styles.subsidyDetailsValue}>{beneficiary.departmentName || 'Not set'}</Text>
+              </View>
+              <View style={styles.subsidyDetailsRow}>
+                <Text style={styles.subsidyDetailsLabel}>Expiry date:</Text>
+                <Text style={styles.subsidyDetailsValue}>{new Date(beneficiary.expiryDate).toLocaleDateString()}</Text>
+              </View>
+            </Card>
+          )}
         </View>
 
         <Controller
@@ -172,9 +272,9 @@ export default function BeneficiaryPurchaseScreen() {
           name="amount"
           render={({ field: { onChange, onBlur, value } }) => (
             <Input
-              label="Amount (GMD)"
-              placeholder="Enter amount"
-              value={value.toString()}
+              label={selectedPaymentMethod === 'Coupon' ? "Liters (L)" : "Amount (GMD)"}
+              placeholder={selectedPaymentMethod === 'Coupon' ? "Enter liters (e.g. 50)" : "Enter amount (e.g. 500)"}
+              value={value === 0 ? '' : value.toString()}
               onChangeText={(text) => onChange(parseFloat(text) || 0)}
               onBlur={onBlur}
               error={errors.amount?.message}
@@ -183,51 +283,58 @@ export default function BeneficiaryPurchaseScreen() {
           )}
         />
 
-        {amount > 0 && (
-          <Card style={styles.summaryCard}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Amount</Text>
-              <Text style={styles.summaryValue}>{formatCurrency(amount)}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Fuel Type</Text>
-              <Text style={styles.summaryValue}>{selectedFuelType}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Price per Liter</Text>
-              <Text style={styles.summaryValue}>
-                {formatCurrency(pricePerLiter)}
-              </Text>
-            </View>
-            {hasBalance && (
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Can Use Balance</Text>
-                <Text
-                  style={[
-                    styles.summaryValue,
-                    canDeductFromBalance ? styles.successText : styles.warningText,
-                  ]}
-                >
-                  {canDeductFromBalance ? 'Yes' : 'No - Pay separately'}
-                </Text>
-              </View>
-            )}
-            <View style={[styles.summaryRow, styles.summaryRowTotal]}>
-              <Text style={styles.summaryLabelTotal}>Liters</Text>
-              <Text style={styles.summaryValueTotal}>
-                {liters.toFixed(2)} L
-              </Text>
-            </View>
-          </Card>
-        )}
+        {(() => {
+          const isSubsidyExceeded = selectedPaymentMethod === 'Coupon' && amount > (beneficiary?.remainingBalance || 0);
+          return (
+            <>
+              {isSubsidyExceeded && (
+                <Card style={styles.warningCard}>
+                  <View style={styles.warningHeader}>
+                    <Ionicons name="alert-circle" size={24} color="#FF9500" />
+                    <Text style={styles.warningTitle}>Allocation Limit Exceeded</Text>
+                  </View>
+                  <Text style={styles.warningText}>
+                    Warning: The requested quantity of {amount} L exceeds your remaining subsidy balance of {beneficiary.remainingBalance} L.
+                    Please reduce the liters, or select **Wallet** or **Bank Account** to make a paid purchase.
+                  </Text>
+                </Card>
+              )}
 
-        <Button
-          title="Proceed to Payment"
-          onPress={handleSubmit(onSubmit)}
-          loading={isLoading}
-          disabled={amount <= 0}
-          style={styles.submitButton}
-        />
+              {amount > 0 && (
+                <Card style={styles.summaryCard}>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Equivalent GMD Value</Text>
+                    <Text style={styles.summaryValue}>{formatCurrency(gmdAmount)}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Fuel Type</Text>
+                    <Text style={styles.summaryValue}>{selectedFuelType}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Price per Liter</Text>
+                    <Text style={styles.summaryValue}>
+                      {formatCurrency(pricePerLiter)}
+                    </Text>
+                  </View>
+                  <View style={[styles.summaryRow, styles.summaryRowTotal]}>
+                    <Text style={styles.summaryLabelTotal}>Total Liters</Text>
+                    <Text style={styles.summaryValueTotal}>
+                      {liters.toFixed(2)} L
+                    </Text>
+                  </View>
+                </Card>
+              )}
+
+              <Button
+                title="Pay & Generate QR"
+                onPress={handleSubmit(onSubmit)}
+                loading={isLoading}
+                disabled={amount <= 0 || isSubsidyExceeded}
+                style={styles.submitButton}
+              />
+            </>
+          );
+        })()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -276,7 +383,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  fuelTypeSection: {
+  section: {
     marginBottom: 24,
   },
   sectionTitle: {
@@ -284,37 +391,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000000',
     marginBottom: 12,
-  },
-  fuelTypeOptions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  fuelTypeCard: {
-    flex: 1,
-    padding: 20,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#E5E5EA',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  fuelTypeCardActive: {
-    borderColor: '#007AFF',
-    backgroundColor: '#F0F8FF',
-  },
-  fuelTypeText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#8E8E93',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  fuelTypeTextActive: {
-    color: '#007AFF',
-  },
-  fuelTypePrice: {
-    fontSize: 12,
-    color: '#8E8E93',
   },
   summaryCard: {
     marginTop: 16,
@@ -341,12 +417,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000000',
   },
-  successText: {
-    color: '#5AC8FA',
-  },
-  warningText: {
-    color: '#FF9500',
-  },
   summaryLabelTotal: {
     fontSize: 18,
     fontWeight: '700',
@@ -359,9 +429,6 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: 8,
-  },
-  section: {
-    marginBottom: 24,
   },
   paymentMethodsContainer: {
     gap: 12,
@@ -397,5 +464,57 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#8E8E93',
+  },
+  subsidyDetailsCard: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#F3F0FF',
+    borderRadius: 16,
+    borderColor: '#D1C4E9',
+    borderWidth: 1,
+  },
+  subsidyDetailsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#512DA8',
+    marginBottom: 10,
+  },
+  subsidyDetailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  subsidyDetailsLabel: {
+    fontSize: 13,
+    color: '#673AB7',
+  },
+  subsidyDetailsValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#512DA8',
+  },
+  warningCard: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#FFF3CD',
+    borderColor: '#FFECB3',
+    borderWidth: 1,
+    borderRadius: 16,
+  },
+  warningHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  warningTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FF8F00',
+    marginLeft: 8,
+  },
+  warningText: {
+    fontSize: 14,
+    color: '#664D03',
+    lineHeight: 20,
   },
 });

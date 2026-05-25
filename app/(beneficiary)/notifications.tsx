@@ -73,7 +73,7 @@ export default function NotificationsScreen() {
         <Card
           style={[
             styles.notificationCard,
-            !item.read && styles.unreadCard,
+            !item.read ? styles.unreadCard : {},
           ]}
         >
           <View style={styles.notificationContent}>

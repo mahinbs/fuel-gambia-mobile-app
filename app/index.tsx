@@ -3,6 +3,7 @@ import { Redirect } from 'expo-router';
 import { useAuthStore, useBeneficiaryStore } from '../store';
 import { UserRole, VerificationStatus } from '../types';
 import { Loading } from '../components/ui/Loading';
+import { Storage } from '../utils/storage';
 
 export default function Index() {
   const { isAuthenticated, user, isLoading, initializeAuth } = useAuthStore();
@@ -19,8 +20,15 @@ export default function Index() {
     }
   }, [user]);
 
+  const hasSeenOnboarding = Storage.get<boolean>('has_seen_onboarding') || false;
+
   if (isLoading) {
     return <Loading />;
+  }
+
+  // First check if they need to see onboarding
+  if (!hasSeenOnboarding) {
+    return <Redirect href="/(auth)/onboarding" />;
   }
 
   if (!isAuthenticated || !user) {
@@ -32,7 +40,7 @@ export default function Index() {
     // Basic verification check
     if (!user.name || !user.phoneNumber) {
        // Should not happen if initialized from auth, but protect against incomplete profiles
-       return <Redirect href="/(auth)/signup" />;
+       return <Redirect href="/(auth)/signup-form" />;
     }
 
     // Check if beneficiary status is set
@@ -63,6 +71,9 @@ export default function Index() {
       return <Redirect href="/(customer)/dashboard" />;
     }
   } else if (user.role === UserRole.ATTENDANT) {
+    if (user.isVerified === false) {
+      return <Redirect href={{ pathname: "/(auth)/attendant-verify", params: { email: user.email } }} />;
+    }
     return <Redirect href="/(attendant)/dashboard" />;
   } else {
     return <Redirect href="/(auth)/login" />;

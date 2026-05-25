@@ -13,7 +13,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { formatCurrency, formatDate } from '../../utils/format';
 import { TransactionMode } from '../../types';
-import { COLOR_THEMES } from '../../utils/constants';
+import { COLOR_THEMES, FUEL_PRICES } from '../../utils/constants';
 
 const theme = COLOR_THEMES.ATTENDANT;
 
@@ -41,10 +41,15 @@ export default function CouponValidationScreen() {
 
   const isValid = !scannedQR.expiry || new Date(scannedQR.expiry) > new Date();
   const isSubsidy = scannedQR.mode === TransactionMode.SUBSIDY;
-  const amount =
-    scannedQR.mode === TransactionMode.SUBSIDY
-      ? (scannedQR as any).remainingAmount
-      : (scannedQR as any).paidAmount;
+  
+  // Calculate quantity to dispense
+  const liters = isSubsidy 
+    ? (scannedQR as any).remainingAmount 
+    : ((scannedQR as any).paidAmount / ((FUEL_PRICES as any)[scannedQR.fuelType] || 1));
+
+  const amountText = isSubsidy
+    ? `${(scannedQR as any).remainingAmount} L (Subsidy)`
+    : `${formatCurrency((scannedQR as any).paidAmount)} (${(scannedQR as any).paymentMethod})`;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,7 +61,7 @@ export default function CouponValidationScreen() {
             color={isValid ? theme.secondary : '#FF3B30'}
           />
           <Text style={styles.statusTitle}>
-            {isValid ? 'Valid Coupon' : 'Invalid Coupon'}
+            {isValid ? 'Valid QR Code' : 'Invalid QR Code'}
           </Text>
         </View>
 
@@ -79,9 +84,26 @@ export default function CouponValidationScreen() {
               </Text>
             </View>
           </View>
+          
+          {(scannedQR as any).departmentName ? (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Department</Text>
+              <Text style={styles.detailValue}>{(scannedQR as any).departmentName}</Text>
+            </View>
+          ) : null}
+
+          {(scannedQR as any).governmentId ? (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Government ID</Text>
+              <Text style={styles.detailValue}>{(scannedQR as any).governmentId}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Mode</Text>
-            <Text style={styles.detailValue}>{scannedQR.mode}</Text>
+            <Text style={styles.detailLabel}>Payment Mode</Text>
+            <Text style={styles.detailValue}>
+              {isSubsidy ? 'Allocated Fuel Quota (Subsidy)' : 'Paid Purchase'}
+            </Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Fuel Type</Text>
@@ -95,10 +117,14 @@ export default function CouponValidationScreen() {
             </View>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>
-              {isSubsidy ? 'Remaining Amount' : 'Paid Amount'}
+            <Text style={styles.detailLabel}>Liters to Dispense</Text>
+            <Text style={[styles.detailValue, styles.amountText]}>
+              {liters.toFixed(2)} L
             </Text>
-            <Text style={[styles.detailValue, styles.amountText]}>{formatCurrency(amount)}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Payment Details</Text>
+            <Text style={styles.detailValue}>{amountText}</Text>
           </View>
           {scannedQR.expiry && (
             <View style={styles.detailRow}>
@@ -154,6 +180,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     padding: 24,
     borderRadius: 24,
+    backgroundColor: '#FFFFFF',
   },
   detailRow: {
     flexDirection: 'row',
@@ -170,7 +197,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#000000',
-    textTransform: 'capitalize',
   },
   tagBadge: {
     paddingHorizontal: 12,
@@ -195,6 +221,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     height: 56,
     borderRadius: 16,
+    backgroundColor: theme.primary,
   },
   scanButton: {
     marginTop: 8,

@@ -8,15 +8,17 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useNotificationStore } from '../../store';
 import { Card } from '../../components/ui/Card';
 import { formatDateTime } from '../../utils/format';
 import { Loading } from '../../components/ui/Loading';
 import { COLOR_THEMES } from '../../utils/constants';
 
-const theme = COLOR_THEMES.USER;
+const theme = COLOR_THEMES.ATTENDANT;
 
-export default function NotificationsScreen() {
+export default function AttendantNotificationsScreen() {
+  const router = useRouter();
   const {
     notifications,
     unreadCount,
@@ -110,7 +112,12 @@ export default function NotificationsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Notifications</Text>
+        <View style={styles.headerTitleRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#000000" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Notifications</Text>
+        </View>
         {unreadCount > 0 && (
           <TouchableOpacity
             style={styles.markAllButton}
@@ -137,7 +144,7 @@ export default function NotificationsScreen() {
       )}
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -146,13 +153,32 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 20,
+    paddingTop: 32,
     paddingBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     color: '#000000',
   },

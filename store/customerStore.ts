@@ -31,7 +31,7 @@ export const useCustomerStore = create<CustomerState>((set, get) => ({
 
   createPaymentIntent: async (amount, fuelType) => {
     set({ isLoading: true });
-    const paymentIntent = await paymentService.createPaymentIntent(amount, fuelType);
+    const paymentIntent = await paymentService.createPaymentIntent(amount, fuelType as any);
     set({ currentPaymentIntent: paymentIntent, isLoading: false });
   },
 

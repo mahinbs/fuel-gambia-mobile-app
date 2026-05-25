@@ -6,6 +6,8 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
@@ -14,11 +16,12 @@ import { z } from 'zod';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { authService } from '../../services/authService';
-import { Storage } from '../../utils/storage';
-import { STORAGE_KEYS } from '../../utils/constants';
 import { useAuthStore } from '../../store';
+import { UserRole } from '../../types';
+
 const loginSchema = z.object({
-  phone: z.string().min(7, 'Invalid phone number'),
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -27,6 +30,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ fromSignup?: string }>();
   const [loading, setLoading] = useState(false);
+  const { login } = useAuthStore();
 
   const {
     control,
@@ -35,27 +39,56 @@ export default function LoginScreen() {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      phone: '',
+      email: '',
+      password: '',
     },
   });
 
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
     try {
-      const result = await authService.sendOTP(data.phone);
-      if (result.success) {
-        // Pass through fromSignup parameter if coming from signup flow
-        const otpParams: any = { phone: data.phone };
-        if (params.fromSignup === 'true') {
-          otpParams.fromSignup = 'true';
+      const result = await authService.loginWithPassword(data.email, data.password);
+      if (result) {
+        login(result.user, result.token);
+
+        if (result.user.role === UserRole.ATTENDANT) {
+          if (result.user.isVerified === false) {
+            router.replace({
+              pathname: '/(auth)/attendant-verify',
+              params: { email: result.user.email },
+            });
+            return;
+          }
+          router.replace('/(attendant)/dashboard');
+        } else {
+          // Customer or Beneficiary
+          router.replace('/');
         }
-        router.push({
-          pathname: '/(auth)/otp',
-          params: otpParams,
-        });
+      } else {
+        Alert.alert('Login Failed', 'Invalid credentials or login failed.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
+      if (error.message?.toLowerCase().includes('email not confirmed') || error.message?.toLowerCase().includes('email not verified')) {
+        Alert.alert(
+          'Email Not Verified',
+          'Please verify your email address to continue.',
+          [
+            {
+              text: 'Verify Now',
+              onPress: () => {
+                router.replace({
+                  pathname: '/(auth)/attendant-verify',
+                  params: { email: data.email },
+                });
+              }
+            },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      } else {
+        Alert.alert('Login Error', error.message || 'An error occurred during login.');
+      }
     } finally {
       setLoading(false);
     }
@@ -71,23 +104,40 @@ export default function LoginScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Fuel Gambia</Text>
             <Text style={styles.subtitle}>
-              Sign in to manage your fuel allocation or purchase fuel.
+              Sign in with your email and password to access your dashboard.
             </Text>
           </View>
 
           <View style={styles.form}>
             <Controller
               control={control}
-              name="phone"
+              name="email"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Phone Number"
-                  placeholder="+220 XXX XXXX"
+                  label="Email Address"
+                  placeholder="your.email@example.com"
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
-                  error={errors.phone?.message}
-                  keyboardType="phone-pad"
+                  error={errors.email?.message}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="password"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label="Password"
+                  placeholder="••••••••"
+                  secureTextEntry
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.password?.message}
                   autoCapitalize="none"
                 />
               )}
@@ -103,95 +153,33 @@ export default function LoginScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>New to Fuel Gambia?</Text>
-            <Button
-              title="Register as User"
-              onPress={() => router.push({
-                pathname: '/(auth)/signup-form',
-                params: { role: 'USER' }
-              })}
-              variant="outline"
-              style={styles.registerButton}
-            />
-          </View>
-
-          <View style={styles.testSection}>
-            <View style={styles.testDivider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.testDividerText}>DEBUG / TEST TOOLS</Text>
-              <View style={styles.dividerLine} />
-            </View>
-            
-            <View style={styles.testButtons}>
+            <View style={styles.registerButtons}>
               <Button
-                title="Login as Beneficiary"
-                onPress={() => handleTestLogin('BENEFICIARY')}
+                title="Register as Normal User"
+                onPress={() => router.push({
+                  pathname: '/(auth)/signup-form',
+                  params: { role: 'USER', isBeneficiary: 'false' }
+                })}
                 variant="outline"
-                style={styles.testButton}
+                style={styles.registerButton}
                 textStyle={{ fontSize: 13 }}
               />
               <Button
-                title="Login as Attendant"
-                onPress={() => handleTestLogin('ATTENDANT')}
+                title="Register as Beneficiary"
+                onPress={() => router.push({
+                  pathname: '/(auth)/signup-form',
+                  params: { role: 'USER', isBeneficiary: 'true' }
+                })}
                 variant="outline"
-                style={styles.testButton}
+                style={styles.registerButton}
                 textStyle={{ fontSize: 13 }}
               />
             </View>
-            <Text style={styles.attendantNote}>
-              Pump attendants do not need to register. Use shortcuts above to test flows.
-            </Text>
           </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-
-  async function handleTestLogin(role: 'USER' | 'BENEFICIARY' | 'ATTENDANT') {
-    setLoading(true);
-    try {
-      const mockPhone = role === 'ATTENDANT' ? '+220 999 8877' : '+220 777 6655';
-      const isBeneficiary = role === 'BENEFICIARY';
-      const actualRole = role === 'ATTENDANT' ? 'ATTENDANT' : 'USER';
-      
-      // Store mock signup data
-      Storage.set('signup_data', {
-        name: role === 'BENEFICIARY' ? 'Almamy Toure' : role === 'ATTENDANT' ? 'Bakary Jatta' : 'Ebrima Sowe',
-        phone: mockPhone,
-        isBeneficiary,
-        stationId: role === 'ATTENDANT' ? 'ST001' : undefined,
-        stationName: role === 'ATTENDANT' ? 'Banjul Central Station' : undefined,
-      });
-      Storage.set(STORAGE_KEYS.SELECTED_ROLE, actualRole);
-      
-      // Ensure beneficiary is approved for test flow
-      if (role === 'BENEFICIARY') {
-        Storage.set('beneficiary_docs_uploaded', true);
-        Storage.set('beneficiary_verification_status', 'APPROVED');
-        Storage.set('mock_beneficiary_data', {
-            monthlyAllocation: 5000,
-            remainingBalance: Storage.get<number>('mock_beneficiary_balance') || 5000,
-            lastAllocationDate: new Date().toISOString(),
-        });
-      }
-
-      // Directly verify OTP (simulated)
-      const auth = await authService.verifyOTP(mockPhone, '123456');
-      if (auth) {
-        useAuthStore.getState().login(auth.user, auth.token);
-        
-        // Navigate based on role
-        if (actualRole === 'ATTENDANT') {
-          router.replace('/(attendant)/dashboard');
-        } else {
-          router.replace('/(customer)/dashboard');
-        }
-      }
-    } catch (error) {
-      console.error('Test login error:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
 }
 
 const styles = StyleSheet.create({
@@ -234,51 +222,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8E8E93',
   },
+  registerButtons: {
+    width: '100%',
+    flexDirection: 'column',
+    gap: 10,
+  },
   registerButton: {
     width: '100%',
-    marginBottom: 8,
-  },
-  attendantNote: {
-    fontSize: 12,
-    color: '#8E8E93',
-    textAlign: 'center',
-    marginTop: 16,
-    paddingHorizontal: 20,
-    lineHeight: 18,
-  },
-  testSection: {
-    marginTop: 24,
-    paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
-  },
-  testDivider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    justifyContent: 'center',
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E5E5EA',
-  },
-  testDividerText: {
-    paddingHorizontal: 12,
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#C7C7CC',
-    letterSpacing: 1.5,
-  },
-  testButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  testButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
-    borderColor: '#E5E5EA',
   },
 });

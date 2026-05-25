@@ -1,170 +1,149 @@
-import { apiClient } from './api';
+import { supabase } from '../utils/supabase';
 import { Beneficiary, VerificationStatus, Transaction } from '../types';
-import { Storage } from '../utils/storage';
-import { STORAGE_KEYS } from '../utils/constants';
 
 export const beneficiaryService = {
   async getBeneficiaryData(): Promise<Beneficiary | null> {
-    // Mock implementation
-    // Check if documents have been uploaded (stored in storage)
-    // For new beneficiaries, return PENDING status instead of null
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        try {
-          // Get user data to check if they are a beneficiary
-          const userData = Storage.get<any>(STORAGE_KEYS.USER_DATA);
-          
-          // If user data doesn't exist, return null
-          if (!userData) {
-            console.warn('No user data found in storage');
-            resolve(null);
-            return;
-          }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
 
-          // Check if user is a beneficiary - handle multiple formats
-          // Check for boolean true, string 'true', number 1, or string '1'
-          const isBeneficiary = 
-            userData.isBeneficiary === true || 
-            userData.isBeneficiary === 'true' || 
-            userData.isBeneficiary === 1 ||
-            userData.isBeneficiary === '1' ||
-            String(userData.isBeneficiary).toLowerCase() === 'true';
-          
-          if (!isBeneficiary) {
-            console.log('User is not a beneficiary:', userData.isBeneficiary);
-            resolve(null);
-            return;
-          }
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
 
-          // Check if documents were uploaded
-          const hasUploadedDocs = Storage.get<boolean>('beneficiary_docs_uploaded') === true;
-          
-          // Check verification status
-          let verificationStatus = VerificationStatus.PENDING;
-          if (hasUploadedDocs) {
-            const storedStatus = Storage.get<VerificationStatus>('beneficiary_verification_status');
-            verificationStatus = storedStatus || VerificationStatus.PENDING;
-          }
+      if (profileError) throw profileError;
+      if (profile.role !== 'BENEFICIARY') return null;
 
-          // Return beneficiary data even if docs aren't uploaded yet
-          // This allows users to see the dashboard and upload documents
-          const beneficiaryData = {
-            id: userData.id || userData.userId || String(Date.now()),
-            phoneNumber: userData.phoneNumber || userData.phone || '+2201234567',
-            role: 'BENEFICIARY' as any,
-            name: userData.name || userData.fullName || 'Beneficiary',
-            verificationStatus: verificationStatus,
-            monthlyAllocation: 5000,
-            remainingBalance: Storage.get<number>('mock_beneficiary_balance') || 5000,
-            fuelType: 'PETROL' as any,
-            expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            isBeneficiary: true as const,
-            createdAt: userData.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          
-          console.log('Returning beneficiary data:', beneficiaryData);
-          resolve(beneficiaryData);
-        } catch (error) {
-          console.error('Error getting beneficiary data:', error);
-          // Try to return basic beneficiary data if user is marked as beneficiary
-          try {
-            const userData = Storage.get<any>(STORAGE_KEYS.USER_DATA);
-            if (userData && (userData.isBeneficiary === true || userData.isBeneficiary === 'true' || userData.isBeneficiary === 1)) {
-              const fallbackData = {
-                id: userData.id || userData.userId || String(Date.now()),
-                phoneNumber: userData.phoneNumber || userData.phone || '+2201234567',
-                role: 'BENEFICIARY' as any,
-                name: userData.name || userData.fullName || 'Beneficiary',
-                verificationStatus: VerificationStatus.PENDING,
-                monthlyAllocation: 0,
-                remainingBalance: 0,
-                fuelType: 'PETROL' as any,
-                expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-                isBeneficiary: true as const,
-                createdAt: userData.createdAt || new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              };
-              resolve(fallbackData);
-              return;
-            }
-          } catch (fallbackError) {
-            console.error('Fallback error:', fallbackError);
-          }
-          resolve(null);
-        }
-      }, 100); // Reduced timeout for faster response
-    });
+      const { data: beneficiary, error: beneficiaryError } = await supabase
+        .from('beneficiaries')
+        .select('*, department:departments(name)')
+        .eq('id', user.id)
+        .single();
 
-    // Real implementation:
-    // const response = await apiClient.get<Beneficiary>('/beneficiary');
-    // return response.success && response.data ? response.data : null;
+      if (beneficiaryError && beneficiaryError.code !== 'PGRST116') throw beneficiaryError;
+
+      return {
+        id: profile.id,
+        phoneNumber: profile.phone_number,
+        role: profile.role as any,
+        name: profile.name,
+        verificationStatus: (beneficiary?.verification_status as VerificationStatus) || VerificationStatus.PENDING,
+        monthlyAllocation: Number(beneficiary?.monthly_allocation || 0),
+        remainingBalance: Number(beneficiary?.remaining_balance || 0),
+        fuelType: beneficiary?.fuel_type as any || 'PETROL',
+        expiryDate: beneficiary?.expiry_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        governmentId: beneficiary?.government_id || profile.government_id || '',
+        departmentName: beneficiary?.department?.name || profile.department_name || '',
+        createdAt: profile.created_at,
+        updatedAt: profile.updated_at,
+      } as Beneficiary;
+    } catch (error) {
+      console.error('Error getting beneficiary data:', error);
+      return null;
+    }
   },
 
   async uploadDocuments(data: {
     governmentId: string;
     employmentLetter: string;
     departmentName: string;
+    userId?: string;
   }): Promise<boolean> {
-    // Mock implementation - sets status to PENDING after upload
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        // Store flags in storage for demo purposes
-        Storage.set('beneficiary_docs_uploaded', true);
-        Storage.set('beneficiary_verification_status', VerificationStatus.PENDING);
-        // In real app, this would make an API call
-        resolve(true);
-      }, 2000);
-    });
+    try {
+      let uid = data.userId;
+      if (!uid) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+        uid = user.id;
+      }
 
-    // Real implementation:
-    // const formData = new FormData();
-    // formData.append('governmentId', data.governmentId);
-    // formData.append('employmentLetter', data.employmentLetter);
-    // formData.append('departmentName', data.departmentName);
-    // const response = await apiClient.post('/beneficiary/documents', formData);
-    // return response.success;
-  },
+      // 1. Find or create department
+      let { data: dept } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('name', data.departmentName)
+        .single();
 
-  async verifyBeneficiary(): Promise<boolean> {
-    // Mock implementation - manually verify the beneficiary
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        // Update verification status to APPROVED
-        Storage.set('beneficiary_verification_status', VerificationStatus.APPROVED);
-        resolve(true);
-      }, 500);
-    });
+      if (!dept) {
+        const { data: newDept, error: deptError } = await supabase
+          .from('departments')
+          .insert({ name: data.departmentName, code: data.departmentName.substring(0, 3).toUpperCase() })
+          .select()
+          .single();
+        if (deptError) throw deptError;
+        dept = newDept;
+      }
 
-    // Real implementation:
-    // const response = await apiClient.post('/beneficiary/verify');
-    // return response.success;
+      // 2. Upsert beneficiary record
+      const { error } = await supabase
+        .from('beneficiaries')
+        .upsert({
+          id: uid,
+          government_id: data.governmentId,
+          department_id: dept?.id,
+          verification_status: 'PENDING',
+        });
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error uploading documents:', error);
+      return false;
+    }
   },
 
   async getTransactions(): Promise<Transaction[]> {
-    // Mock implementation
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve([
-          {
-            id: '1',
-            userId: '1',
-            stationId: 'station1',
-            stationName: 'Shell Station',
-            fuelType: 'PETROL' as any,
-            amount: 500,
-            liters: 7.69,
-            mode: 'SUBSIDY' as any,
-            status: 'SUCCESS' as any,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ]);
-      }, 500);
-    });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
 
-    // Real implementation:
-    // const response = await apiClient.get<Transaction[]>('/beneficiary/transactions');
-    // return response.success && response.data ? response.data : [];
+      const { data, error } = await supabase
+        .from('transactions')
+        .select(`
+          *,
+          station:stations(name)
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map(item => ({
+        id: item.id,
+        userId: item.user_id,
+        stationId: item.station_id,
+        stationName: (item as any).station?.name || 'Unknown Station',
+        fuelType: item.fuel_type as any,
+        amount: item.amount,
+        liters: item.liters,
+        mode: item.mode as any,
+        status: item.status as any,
+        createdAt: item.created_at,
+        updatedAt: item.created_at,
+      }));
+    } catch (error) {
+      console.error('Error fetching beneficiary transactions:', error);
+      return [];
+    }
+  },
+
+  async verifyBeneficiary(): Promise<boolean> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+
+      const { error } = await supabase
+        .from('beneficiaries')
+        .update({ verification_status: 'APPROVED', updated_at: new Date().toISOString() })
+        .eq('id', user.id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error verifying beneficiary:', error);
+      return false;
+    }
   },
 };

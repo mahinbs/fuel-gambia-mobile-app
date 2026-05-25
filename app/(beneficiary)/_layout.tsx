@@ -25,12 +25,18 @@ export default function BeneficiaryLayout() {
         }}
       />
       <Tabs.Screen
+        name="subsidy"
+        options={{
+          title: 'Subsidy',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="gift" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="qr-code"
         options={{
-          title: 'QR Code',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="qr-code" size={size} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

@@ -37,49 +37,14 @@ export default function TransactionHistoryScreen() {
       if (user?.role === UserRole.USER) {
         if (user.isBeneficiary) {
           await fetchBeneficiaryTransactions();
-          setTransactions(beneficiaryTransactions);
+          setTransactions(useBeneficiaryStore.getState().transactions);
         } else {
           await fetchCustomerTransactions();
-          setTransactions(customerTransactions);
+          setTransactions(useCustomerStore.getState().transactions);
         }
       } else if (user?.role === UserRole.ATTENDANT) {
         await fetchRecentTransactions();
-        
-        // Add dummy records if list is empty or for demonstration
-        const dummyTransactions = [
-          {
-            id: 'mock-1',
-            stationName: 'Station 1',
-            fuelType: 'PETROL',
-            liters: 25.5,
-            amount: 1530.00,
-            mode: TransactionMode.PAID,
-            status: 'SUCCESS',
-            createdAt: new Date(Date.now() - 3600000).toISOString(),
-          },
-          {
-            id: 'mock-2',
-            stationName: 'Station 1',
-            fuelType: 'DIESEL',
-            liters: 40.0,
-            amount: 2400.00,
-            mode: TransactionMode.SUBSIDY,
-            status: 'SUCCESS',
-            createdAt: new Date(Date.now() - 7200000).toISOString(),
-          },
-          {
-            id: 'mock-3',
-            stationName: 'Station 1',
-            fuelType: 'PETROL',
-            liters: 15.0,
-            amount: 900.00,
-            mode: TransactionMode.PAID,
-            status: 'SUCCESS',
-            createdAt: new Date(Date.now() - 10800000).toISOString(),
-          }
-        ];
-        
-        setTransactions([...recentTransactions, ...dummyTransactions]);
+        setTransactions(useAttendantStore.getState().recentTransactions);
       }
     } catch (error) {
       console.error('Failed to load transactions:', error);

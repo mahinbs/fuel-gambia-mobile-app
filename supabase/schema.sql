@@ -1,0 +1,50 @@
+-- FUEL GAMBIA — MOBILE APP SUPABASE SCHEMA
+-- 
+-- This is the canonical schema shared with the admin panel.
+-- Run this in your Supabase project SQL Editor.
+-- The same schema powers both the mobile app and admin panel.
+--
+-- For the full schema with all tables, RLS policies, triggers, RPCs, and indexes,
+-- see: fuel-gambia-admin-panel/supabase/schema.sql
+--
+-- Quick reference of tables used by the mobile app:
+--
+-- AUTH / PROFILES
+--   profiles              - All users (customers, beneficiaries, attendants)
+--
+-- CUSTOMER FLOW
+--   customers             - Wallet balance, status
+--   transactions          - All fuel purchase records
+--   payments              - Payment records (mobile money, card)
+--   notifications         - Push/in-app notifications
+--   coupons               - QR coupons for scanning
+--
+-- BENEFICIARY FLOW
+--   beneficiaries         - Verification status, monthly allocation
+--   departments           - Department the beneficiary belongs to
+--   coupon_allocations    - Fuel allocation records from Gov Admin
+--   coupons               - Generated QR coupons
+--   transactions          - Subsidy transactions
+--
+-- ATTENDANT FLOW
+--   attendants            - Station assignment, device binding
+--   stations              - Station info and stock levels
+--   pumps                 - Individual pump info
+--   shifts                - Current shift info
+--   pump_assignments      - Which attendant on which pump
+--   meter_readings        - Opening/closing meter readings
+--   transactions          - Create transactions on QR scan / cash sale
+--
+-- KEY RPC FUNCTIONS (callable from mobile app)
+--   validate_and_redeem_coupon(qr_payload, station_id, attendant_id, liters)
+--   record_cash_sale(station_id, attendant_id, user_id, fuel_type, liters, amount, shift_id, pump_id)
+--   process_fuel_delivery(station_id, received_by, fuel_type, ordered_liters, delivered_liters, ...)
+--   calculate_reconciliation(station_id, period_month, period_year, fuel_type, closing_stock, reconciled_by)
+--   get_dashboard_stats(role, user_id)
+--
+-- Please run the full schema from:
+--   fuel-gambia-admin-panel/supabase/schema.sql
+
+-- Include the full schema here as well for standalone mobile deployment:
+-- (Copy entire contents of ../fuel-gambia-admin-panel/supabase/schema.sql here
+--  or run that file first if using a shared Supabase project)

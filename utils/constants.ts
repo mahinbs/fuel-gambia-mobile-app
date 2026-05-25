@@ -2,6 +2,9 @@ export const API_BASE_URL = __DEV__
   ? 'http://localhost:3000/api'
   : 'https://api.fuelgambia.com/api';
 
+export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://lzyvjwyquatcmhojygoz.supabase.co';
+export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6eXZqd3lxdWF0Y21ob2p5Z296Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MzgyMjIsImV4cCI6MjA5NTExNDIyMn0.Yb_0aI2pWwx90YJCNvjBWZIZdrm5NTC0343_4XagkNM';
+
 export const STORAGE_KEYS = {
   AUTH_TOKEN: 'auth_token',
   REFRESH_TOKEN: 'refresh_token',

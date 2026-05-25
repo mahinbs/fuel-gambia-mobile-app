@@ -42,6 +42,8 @@ export interface User {
   paymentMethods?: string[];
   institutionCode?: string; // For beneficiaries only
   isBeneficiary?: boolean; // Track if user is a fuel beneficiary
+  isVerified?: boolean; // Track if the user email has been verified
+  stationId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -133,6 +135,22 @@ export interface PaymentIntent {
   status: PaymentStatus;
   paymentMethod?: string;
   transactionId?: string;
+}
+
+export interface Payment {
+  id: string;
+  userId: string;
+  transactionId?: string;
+  amount: number;
+  fuelType?: FuelType;
+  status: PaymentStatus;
+  paymentMethod: string;
+  gatewayReference?: string;
+  gatewayResponse?: any;
+  retryCount: number;
+  refunded: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // API Response Types

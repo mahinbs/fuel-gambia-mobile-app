@@ -19,13 +19,24 @@ export default function InventoryScreen() {
   const { inventory, fetchInventory, isLoading } = useAttendantStore();
 
   useEffect(() => {
-    if (user && 'stationId' in user) {
-      fetchInventory((user as any).stationId || 'station1');
+    if (user && 'stationId' in user && (user as any).stationId) {
+      fetchInventory((user as any).stationId);
     }
-  }, []);
+  }, [user]);
 
   if (isLoading) {
     return <Loading />;
+  }
+
+  if (!user || !('stationId' in user) || !(user as any).stationId) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.emptyContainer}>
+          <Ionicons name="warning-outline" size={48} color="#8E8E93" style={{ marginBottom: 12 }} />
+          <Text style={styles.emptyText}>No Station Assigned</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   if (!inventory) {

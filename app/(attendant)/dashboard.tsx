@@ -21,20 +21,39 @@ const theme = COLOR_THEMES.ATTENDANT;
 
 export default function AttendantDashboard() {
   const router = useRouter();
-  const { user } = useAuthStore();
-  const { inventory, fetchInventory, recentTransactions, fetchRecentTransactions, isLoading } =
+  const { user, isLoading: isAuthLoading } = useAuthStore();
+  const { inventory, fetchInventory, recentTransactions, fetchRecentTransactions, isLoading: isInventoryLoading } =
     useAttendantStore();
 
   useEffect(() => {
-    const stationId = (user && 'stationId' in user && (user as any).stationId) 
-      ? (user as any).stationId 
-      : 'station1';
-    
-    fetchInventory(stationId);
-    fetchRecentTransactions();
+    if (user && 'stationId' in user && (user as any).stationId) {
+      fetchInventory((user as any).stationId);
+      fetchRecentTransactions();
+    }
   }, [user, fetchInventory, fetchRecentTransactions]);
 
-  if (isLoading || !inventory) {
+  if (isAuthLoading) {
+    return <Loading />;
+  }
+
+  if (!user || !('stationId' in user) || !(user as any).stationId) {
+    return (
+      <SafeAreaView style={styles.errorContainer}>
+        <Ionicons name="warning-outline" size={64} color="#FF3B30" />
+        <Text style={styles.errorTitle}>No Station Assigned</Text>
+        <Text style={styles.errorText}>
+          You are not currently linked to any fuel station branch. Please contact your manager to get assigned.
+        </Text>
+        <Button
+          title="Sign Out"
+          onPress={() => useAuthStore.getState().logout()}
+          style={styles.signOutButton}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (isInventoryLoading || !inventory) {
     return <Loading />;
   }
 
@@ -494,5 +513,31 @@ const styles = StyleSheet.create({
   quickLinkText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    backgroundColor: '#F2F2F7',
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 32,
+  },
+  signOutButton: {
+    width: '100%',
+    maxWidth: 200,
   },
 });

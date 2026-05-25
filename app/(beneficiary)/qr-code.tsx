@@ -20,71 +20,109 @@ import { generateQRData } from '../../utils/qr';
 import { formatCurrency, formatDate } from '../../utils/format';
 import { COLOR_THEMES, FUEL_PRICES } from '../../utils/constants';
 import { Clipboard } from '../../utils/clipboard';
+import { supabase } from '../../utils/supabase';
 
 const theme = COLOR_THEMES.BENEFICIARY;
 
 export default function QRCodeScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ qrId?: string }>();
+  const params = useLocalSearchParams<{ qrId?: string; success?: string }>();
   const { user } = useAuthStore();
   const { beneficiary, currentPaymentIntent, fetchBeneficiary, isLoading, saveQRCode, qrCodes } = useBeneficiaryStore();
   const [qrData, setQrData] = useState<string>('');
   const [qrPayload, setQrPayload] = useState<any>(null);
+  const [isUsed, setIsUsed] = useState(false);
   const hasGeneratedRef = useRef(false);
 
   // Prevent navigation away from QR code screen
   useFocusEffect(
     React.useCallback(() => {
-      // Screen is focused - keep it visible
       return () => {
-        // Screen loses focus - but don't navigate away automatically
+        // Screen loses focus
       };
     }, [])
   );
 
   useEffect(() => {
-    // Always fetch beneficiary data on mount, but don't redirect
     fetchBeneficiary();
   }, []);
 
+  // Poll status from database if qrId is provided
   useEffect(() => {
-    // Load QR code from saved data if qrId is provided
-    if (params.qrId && qrCodes.length > 0) {
+    if (params.qrId) {
+      const checkStatus = async () => {
+        try {
+          const { data: tx, error } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('qr_code', params.qrId)
+            .single();
+
+          if (tx) {
+            if (tx.status === 'SUCCESS') {
+              setIsUsed(true);
+            }
+            
+            setQrPayload({
+              transactionId: tx.id,
+              qrCodeToken: tx.qr_code,
+              userId: tx.user_id,
+              fuelType: tx.fuel_type,
+              paidAmount: Number(tx.amount || 0),
+              remainingAmount: Number(tx.liters || 0),
+              expiry: new Date(new Date(tx.created_at).getTime() + 24 * 60 * 60 * 1000).toISOString(),
+              mode: tx.mode,
+              paymentMethod: tx.payment_method,
+            });
+            setQrData(tx.qr_code);
+            hasGeneratedRef.current = true;
+          }
+        } catch (err) {
+          console.error('Error fetching transaction status:', err);
+        }
+      };
+
+      checkStatus();
+      const interval = setInterval(checkStatus, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [params.qrId]);
+
+  useEffect(() => {
+    // If we have a local qrId, find it in local store as fallback
+    if (params.qrId && qrCodes.length > 0 && !qrPayload) {
       const savedQR = qrCodes.find(qr => qr.id === params.qrId);
       if (savedQR) {
         setQrData(savedQR.qrData);
         setQrPayload(savedQR.payload);
+        if (savedQR.status === 'USED' || savedQR.status === 'COMPLETE') {
+          setIsUsed(true);
+        }
         hasGeneratedRef.current = true;
-        return;
       }
     }
-  }, [params.qrId, qrCodes]);
+  }, [params.qrId, qrCodes, qrPayload]);
 
   useEffect(() => {
-    // Reset generation flag when payment intent changes
     if (currentPaymentIntent && !params.qrId) {
       hasGeneratedRef.current = false;
     }
   }, [currentPaymentIntent?.id, params.qrId]);
 
   useEffect(() => {
-    // Generate QR when user is available, but only once per payment intent
+    // Generate default QR when user is available and no qrId exists
     if (user && !hasGeneratedRef.current && !params.qrId) {
-      // Small delay to ensure state is updated
       const timer = setTimeout(() => {
-        generateQR();
+        generateDefaultQR();
         hasGeneratedRef.current = true;
       }, 100);
       return () => clearTimeout(timer);
     }
   }, [user, beneficiary, currentPaymentIntent, params.qrId]);
 
-  const generateQR = () => {
-    if (!user) {
-      return;
-    }
+  const generateDefaultQR = () => {
+    if (!user) return;
 
-    // Check if there's a payment intent (paid purchase)
     if (currentPaymentIntent && currentPaymentIntent.status === 'SUCCESS') {
       const payload = {
         transactionId: currentPaymentIntent.transactionId || `TXN-${Date.now()}`,
@@ -92,12 +130,12 @@ export default function QRCodeScreen() {
         paidAmount: currentPaymentIntent.amount,
         expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         mode: TransactionMode.PAID as const,
+        paymentMethod: currentPaymentIntent.paymentMethod || 'WALLET',
       };
       const qrString = generateQRData(payload as any);
       setQrData(qrString);
       setQrPayload(payload);
       
-      // Save QR code with pending status
       if (saveQRCode) {
         saveQRCode({
           id: payload.transactionId,
@@ -110,9 +148,7 @@ export default function QRCodeScreen() {
       return;
     }
 
-    // Generate from beneficiary balance (even if 0, for testing)
     if (user.role === UserRole.USER) {
-      // Use beneficiary data if available, otherwise use defaults
       const userId = beneficiary?.id || (user as any).id || user.phoneNumber || '1';
       const couponId = `COUPON-${Date.now()}`;
       const payload = {
@@ -122,12 +158,12 @@ export default function QRCodeScreen() {
         remainingAmount: beneficiary?.remainingBalance ?? 0,
         expiry: beneficiary?.expiryDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         mode: TransactionMode.SUBSIDY as const,
+        paymentMethod: 'COUPON',
       };
       const qrString = generateQRData(payload as any);
       setQrData(qrString);
       setQrPayload(payload);
       
-      // Save QR code with pending status
       if (saveQRCode) {
         saveQRCode({
           id: couponId,
@@ -144,22 +180,10 @@ export default function QRCodeScreen() {
   const handleCopy = async () => {
     try {
       await Clipboard.setStringAsync(qrData);
-      Alert.alert('Copied', 'QR code data copied to clipboard');
+      Alert.alert('Copied', 'QR code token copied to clipboard');
     } catch (error) {
       console.error('Failed to copy:', error);
       Alert.alert('Error', 'Failed to copy QR code data');
-    }
-  };
-
-  const handleScanQR = () => {
-    if (Platform.OS === 'web') {
-      Alert.alert(
-        'QR Scanner',
-        'Camera scanning is not available on web. Please use the attendant scanner or enter QR code manually.',
-        [{ text: 'OK' }]
-      );
-    } else {
-      router.push('/(attendant)/scanner');
     }
   };
 
@@ -174,54 +198,54 @@ export default function QRCodeScreen() {
     );
   }
 
-  // Only block if user is not a USER role
   if (!user || user.role !== UserRole.USER) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyContainer}>
           <Ionicons name="qr-code-outline" size={64} color={theme.primary} />
           <Text style={styles.emptyTitle}>Access Denied</Text>
-          <Text style={styles.emptyText}>
-            This page is only available for users.
-          </Text>
-          <Button
-            title="Go Back"
-            onPress={() => router.back()}
-            variant="outline"
-            style={styles.backButton}
-          />
+          <Text style={styles.emptyText}>This page is only available for users.</Text>
+          <Button title="Go Back" onPress={() => router.back()} variant="outline" style={styles.backButton} />
         </View>
       </SafeAreaView>
     );
   }
 
-  // Show warning if balance is 0 but still allow QR generation
-  const hasBalance = (beneficiary?.remainingBalance ?? 0) > 0;
-  const showBalanceWarning = !hasBalance && !currentPaymentIntent;
-
-  if (!qrData || !qrPayload) {
+  if (isUsed) {
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.emptyContainer}>
-            <Ionicons name="qr-code-outline" size={64} color={theme.primary} />
-            <Text style={styles.emptyTitle}>Generating QR Code...</Text>
-            <Text style={styles.emptyText}>
-              {!user ? 'Loading user data...' : !beneficiary ? 'Loading beneficiary data...' : 'Preparing QR code...'}
-            </Text>
-            <View style={styles.emptyActions}>
-              <Button
-                title="Generate QR Code"
-                onPress={generateQR}
-                style={styles.actionButton}
-              />
-              <Button
-                title="Go Back"
-                onPress={() => router.back()}
-                variant="outline"
-                style={styles.actionButton}
-              />
+          <View style={styles.successContainer}>
+            <View style={styles.successCircle}>
+              <Ionicons name="checkmark-circle" size={80} color="#34C759" />
             </View>
+            <Text style={styles.successTitle}>Fuel Provided Successfully!</Text>
+            <Text style={styles.successText}>
+              The pump attendant has completed the transaction and dispensed the fuel.
+            </Text>
+            
+            <Card style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Fuel Type</Text>
+                <Text style={styles.infoValue}>{qrPayload?.fuelType}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Quantity Dispensed</Text>
+                <Text style={styles.infoValue}>{qrPayload?.remainingAmount || qrPayload?.paidAmount / (FUEL_PRICES as any)[qrPayload?.fuelType]} L</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Mode of Payment</Text>
+                <Text style={styles.infoValue}>
+                  {qrPayload?.mode === 'SUBSIDY' ? 'Allocated Fuel Quota' : 'Paid Purchase'}
+                </Text>
+              </View>
+            </Card>
+
+            <Button
+              title="Return to Dashboard"
+              onPress={() => router.replace('/(beneficiary)/dashboard')}
+              style={{ width: '100%' }}
+            />
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -232,33 +256,23 @@ export default function QRCodeScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color="#000000" />
           </TouchableOpacity>
           <Text style={styles.title}>
-            {currentPaymentIntent && currentPaymentIntent.status === 'SUCCESS'
-              ? 'Paid Fuel QR Code'
-              : 'Subsidized Fuel QR Code'}
+            {qrPayload?.mode === 'PAID' ? 'Paid Fuel QR Code' : 'Subsidized Fuel QR Code'}
           </Text>
-          <TouchableOpacity
-            style={styles.scannerButton}
-            onPress={handleScanQR}
-          >
-            <Ionicons name="scan" size={24} color={theme.primary} />
-          </TouchableOpacity>
+          <View style={{ width: 40 }} />
         </View>
 
-        {showBalanceWarning && (
-          <Card style={[styles.warningCard, { backgroundColor: '#FFF3CD', borderColor: '#FF9500' }]}>
-            <View style={styles.warningContent}>
-              <Ionicons name="information-circle" size={20} color="#FF9500" />
-              <View style={styles.warningText}>
-                <Text style={styles.infoText}>This code isn&apos;t valid yet. Complete payment to activate.</Text>
-                <Text style={styles.warningMessage}>
-                  Your balance is zero. You can still generate a QR code, but you&apos;ll need to purchase fuel first.
+        {params.success === 'true' && (
+          <Card style={styles.successBannerCard}>
+            <View style={styles.successBannerContent}>
+              <Ionicons name="checkmark-circle" size={40} color="#34C759" />
+              <View style={styles.successBannerTextContainer}>
+                <Text style={styles.successBannerTitle}>Purchase Request Successful!</Text>
+                <Text style={styles.successBannerMessage}>
+                  Your fuel voucher QR code has been generated. Present this to the attendant to dispense fuel.
                 </Text>
               </View>
             </View>
@@ -270,95 +284,66 @@ export default function QRCodeScreen() {
         </Card>
 
         <Card style={styles.infoCard}>
+          <Text style={styles.buySummaryTitle}>Buy Summary</Text>
+          <View style={styles.buySummaryDivider} />
+
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Amount</Text>
+            <Text style={styles.infoLabel}>Allocated Volume</Text>
+            <Text style={styles.infoValue}>
+              {qrPayload?.mode === 'PAID'
+                ? `${(qrPayload.paidAmount / (FUEL_PRICES as any)[qrPayload.fuelType]).toFixed(2)} L`
+                : `${qrPayload?.remainingAmount || 0} L`}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Equivalent GMD Value</Text>
             <Text style={styles.infoValue}>
               {formatCurrency(
-                currentPaymentIntent && currentPaymentIntent.status === 'SUCCESS'
-                  ? currentPaymentIntent.amount
-                  : (beneficiary?.remainingBalance ?? 0)
+                qrPayload?.mode === 'PAID'
+                  ? qrPayload.paidAmount
+                  : (qrPayload?.remainingAmount || 0) * (FUEL_PRICES as any)[qrPayload?.fuelType || 'PETROL']
               )}
             </Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Fuel Type</Text>
+            <Text style={styles.infoValue}>{qrPayload?.fuelType}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Mode of Payment</Text>
             <Text style={styles.infoValue}>
-              {currentPaymentIntent && currentPaymentIntent.status === 'SUCCESS'
-                ? currentPaymentIntent.fuelType
-                : (beneficiary?.fuelType || 'PETROL')}
+              {qrPayload?.mode === 'SUBSIDY' ? 'Allocated Fuel Quota (Subsidy)' : 'Paid Purchase'}
             </Text>
           </View>
+          {beneficiary?.departmentName ? (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Department</Text>
+              <Text style={styles.infoValue}>{beneficiary.departmentName}</Text>
+            </View>
+          ) : null}
+          {beneficiary?.governmentId ? (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Government ID</Text>
+              <Text style={styles.infoValue}>{beneficiary.governmentId}</Text>
+            </View>
+          ) : null}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Expires</Text>
-            <Text style={styles.infoValue}>
-              {formatDate(
-                currentPaymentIntent && currentPaymentIntent.status === 'SUCCESS'
-                  ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-                  : (beneficiary?.expiryDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString())
-              )}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Mode</Text>
-            <Text style={styles.infoValue}>
-              {currentPaymentIntent && currentPaymentIntent.status === 'SUCCESS'
-                ? 'PAID'
-                : 'SUBSIDY'}
-            </Text>
+            <Text style={styles.infoValue}>{formatDate(qrPayload?.expiry || new Date().toISOString())}</Text>
           </View>
         </Card>
 
         <View style={styles.actions}>
-          <Button
-            title="Copy QR Data"
-            onPress={handleCopy}
-            variant="outline"
-            style={{ width: '100%' }}
-          />
-          <Button
-            title="Scan QR Code"
-            onPress={handleScanQR}
-            style={{ width: '100%', backgroundColor: theme.primary }}
-          />
-          <Button
-            title="Regenerate"
-            onPress={generateQR}
-            variant="secondary"
-            style={{ width: '100%' }}
-          />
+          <Button title="Copy QR Code Token" onPress={handleCopy} variant="outline" style={{ width: '100%' }} />
+          <Button title="Return to Dashboard" onPress={() => router.replace('/(beneficiary)/dashboard')} style={{ width: '100%', backgroundColor: theme.primary }} />
         </View>
 
         <Card style={styles.instructionsCard}>
-          <Text style={styles.instructionsTitle}>Purchase Summary</Text>
-          <View style={styles.summaryRow}>
-             <Text style={styles.infoLabel}>Amount</Text>
-             <Text style={styles.infoValue}>
-               {formatCurrency(
-                 qrPayload.mode === TransactionMode.PAID
-                   ? qrPayload.paidAmount
-                   : qrPayload.remainingAmount
-               )}
-             </Text>
-          </View>
-          <View style={styles.summaryRow}>
-             <Text style={styles.infoLabel}>Fuel Type</Text>
-             <Text style={styles.infoValue}>{qrPayload.fuelType}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-             <Text style={styles.infoLabel}>Estimated Volume</Text>
-             <Text style={styles.infoValue}>
-               {((qrPayload.mode === TransactionMode.PAID ? qrPayload.paidAmount : qrPayload.remainingAmount) / (FUEL_PRICES as any)[qrPayload.fuelType]).toFixed(2)} {qrPayload.fuelType === 'BUTANE' ? 'KG' : 'L'}
-             </Text>
-          </View>
-        </Card>
-
-        <Card style={styles.instructionsCard}>
-          <Text style={styles.instructionsTitle}>How to use</Text>
+          <Text style={styles.instructionsTitle}>Instructions</Text>
           <Text style={styles.instructionsText}>
-            1. Show this QR code to the fuel station attendant{'\n'}
-            2. The attendant will scan the code{'\n'}
-            3. Select the amount of fuel to dispense{'\n'}
-            4. Receive your fuel and receipt
+            1. Present this QR code to the station attendant.{'\n'}
+            2. The attendant will scan and verify details (liters, department, subsidy).{'\n'}
+            3. Once fuel is dispensed, the attendant will mark the scan complete, automatically updating your quota.
           </Text>
         </Card>
       </ScrollView>
@@ -395,52 +380,23 @@ const styles = StyleSheet.create({
     color: '#000000',
     textAlign: 'center',
   },
-  scannerButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  warningCard: {
-    width: '100%',
-    marginBottom: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderRadius: 12,
-  },
-  warningContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  warningText: {
-    flex: 1,
-  },
-  warningTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FF9500',
-    marginBottom: 4,
-  },
-  warningMessage: {
-    fontSize: 14,
-    color: '#8E8E93',
-    lineHeight: 20,
-  },
-  infoText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FF9500',
-    marginBottom: 4,
-  },
   qrCard: {
     marginBottom: 24,
     padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
   infoCard: {
     width: '100%',
     marginBottom: 24,
     padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
   },
   infoRow: {
     flexDirection: 'row',
@@ -464,9 +420,11 @@ const styles = StyleSheet.create({
   instructionsCard: {
     width: '100%',
     padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
   },
   instructionsTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: '#000000',
     marginBottom: 12,
@@ -483,31 +441,79 @@ const styles = StyleSheet.create({
     padding: 20,
     minHeight: 400,
   },
-  emptyActions: {
-    width: '100%',
-    gap: 12,
-    marginTop: 24,
-  },
-  actionButton: {
-    width: '100%',
-  },
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#000000',
     marginTop: 16,
-    marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
     color: '#8E8E93',
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
   },
-  summaryRow: {
+  successBannerCard: {
+    width: '100%',
+    padding: 16,
+    backgroundColor: '#E8F8F5',
+    borderColor: '#A3E4D7',
+    borderWidth: 1,
+    borderRadius: 20,
+    marginBottom: 20,
+  },
+  successBannerContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    gap: 12,
+  },
+  successBannerTextContainer: {
+    flex: 1,
+  },
+  successBannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#117A65',
+    marginBottom: 4,
+  },
+  successBannerMessage: {
+    fontSize: 13,
+    color: '#16A085',
+    lineHeight: 18,
+  },
+  buySummaryTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 10,
+  },
+  buySummaryDivider: {
+    height: 1,
+    backgroundColor: '#E5E5EA',
+    marginBottom: 16,
+  },
+  successContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
+    width: '100%',
+  },
+  successCircle: {
+    marginBottom: 24,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#000000',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  successText: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 22,
   },
 });

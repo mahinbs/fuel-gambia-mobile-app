@@ -24,8 +24,14 @@ export default function TransactionHistoryScreen() {
   const { transactions: customerTransactions, fetchTransactions: fetchCustomerTransactions } =
     useCustomerStore();
   const { recentTransactions, fetchRecentTransactions } = useAttendantStore();
-  const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const transactions =
+    user?.role === UserRole.USER && user.isBeneficiary
+      ? beneficiaryTransactions
+      : user?.role === UserRole.USER && !user.isBeneficiary
+      ? customerTransactions
+      : recentTransactions;
 
   useEffect(() => {
     loadTransactions();
@@ -35,13 +41,10 @@ export default function TransactionHistoryScreen() {
     setLoading(true);
     if (user?.role === UserRole.USER && user.isBeneficiary) {
       await fetchBeneficiaryTransactions();
-      setTransactions(beneficiaryTransactions);
     } else if (user?.role === UserRole.USER && !user.isBeneficiary) {
       await fetchCustomerTransactions();
-      setTransactions(customerTransactions);
     } else if (user?.role === UserRole.ATTENDANT) {
       await fetchRecentTransactions();
-      setTransactions(recentTransactions);
     }
     setLoading(false);
   };

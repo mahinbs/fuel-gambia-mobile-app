@@ -55,7 +55,7 @@ export default function ProfileScreen() {
         <Card style={styles.card}>
           <TouchableOpacity 
             style={styles.menuItem}
-            onPress={() => Alert.alert('Profile', 'Edit profile functionality coming soon')}
+            onPress={() => router.push('/(attendant)/edit-profile')}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: theme.secondary + '20' }]}>
               <Ionicons name="person-outline" size={24} color={theme.primary} />
@@ -66,7 +66,7 @@ export default function ProfileScreen() {
  
           <TouchableOpacity 
             style={styles.menuItem}
-            onPress={() => Alert.alert('Security', 'Change password functionality coming soon')}
+            onPress={() => router.push('/(attendant)/change-password')}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: theme.secondary + '20' }]}>
               <Ionicons name="lock-closed-outline" size={24} color={theme.primary} />
@@ -77,18 +77,18 @@ export default function ProfileScreen() {
  
           <TouchableOpacity 
             style={styles.menuItem}
-            onPress={() => Alert.alert('Settings', 'Notification settings coming soon')}
+            onPress={() => router.push('/(attendant)/notifications')}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: theme.secondary + '20' }]}>
               <Ionicons name="notifications-outline" size={24} color={theme.primary} />
             </View>
-            <Text style={styles.menuText}>Notification Settings</Text>
+            <Text style={styles.menuText}>Notifications</Text>
             <Ionicons name="chevron-forward" size={24} color="#8E8E93" />
           </TouchableOpacity>
  
           <TouchableOpacity 
             style={styles.menuItem}
-            onPress={() => Alert.alert('Help', 'Help & Support coming soon')}
+            onPress={() => router.push('/(attendant)/help-support')}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: theme.secondary + '20' }]}>
               <Ionicons name="help-circle-outline" size={24} color={theme.primary} />

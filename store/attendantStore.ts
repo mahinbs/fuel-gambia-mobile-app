@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Inventory, Transaction, QRPayload, FuelType, TransactionMode, PaymentStatus } from '../types';
 import { inventoryService } from '../services/inventoryService';
 import { transactionService } from '../services/transactionService';
+import { supabase } from '../utils/supabase';
 
 interface AttendantState {
   inventory: Inventory | null;
@@ -26,6 +27,9 @@ export const useAttendantStore = create<AttendantState>((set, get) => ({
     set({ isLoading: true });
     try {
       const inventory = await inventoryService.getInventory(stationId);
+      if (!inventory) {
+        throw new Error('Inventory not found or failed to fetch');
+      }
       set({ inventory, isLoading: false });
     } catch (error) {
       console.error('Failed to fetch inventory:', error);
@@ -56,35 +60,30 @@ export const useAttendantStore = create<AttendantState>((set, get) => ({
     if (!inventory || !scannedQR) return false;
 
     set({ isLoading: true });
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          status: 'SUCCESS',
+          attendant_id: authUser?.id,
+          station_id: inventory.stationId,
+        })
+        .eq('id', (scannedQR as any).transactionId);
 
-    // Update local inventory
-    const updatedInventory = {
-      ...inventory,
-      petrolStock:
-        fuelType === FuelType.PETROL
-          ? inventory.petrolStock - liters
-          : inventory.petrolStock,
-      dieselStock:
-        fuelType === FuelType.DIESEL
-          ? inventory.dieselStock - liters
-          : inventory.dieselStock,
-      lastUpdated: new Date().toISOString(),
-    };
+      if (error) throw error;
 
-    // Sync with backend
-    const success = await inventoryService.updateInventory(
-      inventory.stationId,
-      fuelType,
-      liters
-    );
-
-    if (success) {
-      set({ inventory: updatedInventory });
+      // Reload inventory and recent transactions to reflect stock/completion
+      await get().fetchInventory(inventory.stationId);
       await get().fetchRecentTransactions();
-    }
 
-    set({ isLoading: false });
-    return success;
+      set({ isLoading: false });
+      return true;
+    } catch (err) {
+      console.error('Dispense fuel error:', err);
+      set({ isLoading: false });
+      return false;
+    }
   },
 
   recordCashSale: async (saleData) => {

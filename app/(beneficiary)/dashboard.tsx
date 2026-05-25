@@ -24,17 +24,27 @@ const theme = COLOR_THEMES.ATTENDANT;
 export default function BeneficiaryDashboard() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { beneficiary, isLoading, fetchBeneficiary, getPendingQRCodes, qrCodes } = useBeneficiaryStore();
+  const { 
+    beneficiary, 
+    isLoading, 
+    fetchBeneficiary, 
+    getPendingQRCodes, 
+    qrCodes,
+    transactions,
+    fetchTransactions
+  } = useBeneficiaryStore();
+  const [activeTab, setActiveTab] = React.useState<'pending' | 'completed'>('pending');
 
   useEffect(() => {
-    const loadBeneficiary = async () => {
+    const loadData = async () => {
       try {
         await fetchBeneficiary();
+        await fetchTransactions();
       } catch (error) {
-        console.error('Error fetching beneficiary data:', error);
+        console.error('Error loading dashboard data:', error);
       }
     };
-    loadBeneficiary();
+    loadData();
   }, []);
 
   // Note: Document upload is only part of signup flow, not login
@@ -50,20 +60,20 @@ export default function BeneficiaryDashboard() {
     // Check if user is actually a beneficiary - handle multiple formats
     // Type assertion needed because storage might return string/number values at runtime
     const beneficiaryValue: unknown = user?.isBeneficiary;
-    const isUserBeneficiary = 
-      beneficiaryValue === true || 
-      beneficiaryValue === 'true' || 
+    const isUserBeneficiary =
+      beneficiaryValue === true ||
+      beneficiaryValue === 'true' ||
       beneficiaryValue === 1 ||
       beneficiaryValue === '1' ||
       String(beneficiaryValue || '').toLowerCase() === 'true';
-    
+
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyContainer}>
           <Ionicons name="shield-outline" size={64} color="#C7C7CC" />
           <Text style={styles.emptyText}>Complete Your Beneficiary Setup</Text>
           <Text style={styles.emptySubtext}>
-            {isUserBeneficiary 
+            {isUserBeneficiary
               ? 'Please upload your documents to access beneficiary features.'
               : 'Please complete your signup process to access beneficiary features.'}
           </Text>
@@ -94,7 +104,7 @@ export default function BeneficiaryDashboard() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -120,7 +130,7 @@ export default function BeneficiaryDashboard() {
               <Text style={styles.greeting}>Welcome back!</Text>
               <Text style={styles.userName}>{beneficiary.name || user?.name || 'Beneficiary'}</Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.profileButton}
               onPress={() => router.push('/(beneficiary)/profile')}
             >
@@ -217,17 +227,37 @@ export default function BeneficiaryDashboard() {
                 <View>
                   <Text style={styles.allocationLabel}>Monthly Allocation</Text>
                   <Text style={styles.allocationAmount}>
-                    {formatCurrency(beneficiary.monthlyAllocation)}
+                    {beneficiary.monthlyAllocation} L
                   </Text>
                 </View>
                 <View style={styles.allocationIconContainer}>
                   <Ionicons name="gift" size={32} color="#FFFFFF" />
                 </View>
               </View>
+              
+              <View style={styles.allocationDivider} />
+              
+              <View style={styles.allocationDetails}>
+                <View style={styles.allocationDetailItem}>
+                  <Text style={styles.allocationDetailLabel}>Total Used</Text>
+                  <Text style={styles.allocationDetailValue}>
+                    {Math.max(0, beneficiary.monthlyAllocation - beneficiary.remainingBalance).toFixed(1)} L
+                  </Text>
+                </View>
+                
+                <View style={styles.allocationDetailDivider} />
+                
+                <View style={styles.allocationDetailItem}>
+                  <Text style={styles.allocationDetailLabel}>Remaining Quota</Text>
+                  <Text style={styles.allocationDetailValue}>
+                    {beneficiary.remainingBalance} L
+                  </Text>
+                </View>
+              </View>
             </Card>
 
             {/* Stats Row */}
-            <View style={styles.statsContainer}>
+            {/* <View style={styles.statsContainer}>
               <Card style={styles.statCard}>
                 <View style={styles.statIconContainer}>
                   <View style={[styles.statIcon, { backgroundColor: theme.secondary }]}>
@@ -236,7 +266,7 @@ export default function BeneficiaryDashboard() {
                 </View>
                 <Text style={styles.statLabel}>Remaining Balance</Text>
                 <Text style={styles.statValue}>
-                  {formatCurrency(beneficiary.remainingBalance)}
+                  {beneficiary.remainingBalance} L
                 </Text>
                 <View style={styles.progressBarContainer}>
                   <View style={styles.progressBar}>
@@ -284,7 +314,7 @@ export default function BeneficiaryDashboard() {
                   <Text style={styles.fuelTypeText}>Diesel</Text>
                 </View>
               </Card>
-            </View>
+            </View> */}
 
             {/* Expiry Card */}
             <Card style={styles.expiryCard}>
@@ -302,63 +332,117 @@ export default function BeneficiaryDashboard() {
               </View>
             </Card>
 
-            {/* QR Code Status Cards */}
-            {getPendingQRCodes().length > 0 && (
-              <View style={styles.qrStatusSection}>
-                <Text style={styles.sectionTitle}>Pending QR Codes</Text>
-                {getPendingQRCodes().slice(0, 3).map((qrCode) => (
-                  <TouchableOpacity
-                    key={qrCode.id}
-                    onPress={() => router.push({
-                      pathname: '/(beneficiary)/qr-code',
-                      params: { qrId: qrCode.id }
-                    })}
-                    activeOpacity={0.7}
-                  >
-                    <Card style={styles.qrStatusCard}>
-                      <View style={styles.qrStatusContent}>
-                        <View style={[styles.qrStatusIconContainer, { backgroundColor: '#E3F2FD' }]}>
-                          <Ionicons name="qr-code" size={24} color={theme.primary} />
-                        </View>
-                        <View style={styles.qrStatusInfo}>
-                          <Text style={styles.qrStatusTitle}>
-                            {qrCode.payload.mode === 'PAID' ? 'Paid Fuel QR' : 'Subsidized Fuel QR'}
-                          </Text>
-                          <Text style={styles.qrStatusDetails}>
-                            {formatCurrency(qrCode.payload.paidAmount || qrCode.payload.remainingAmount || 0)} • {qrCode.payload.fuelType}
-                          </Text>
-                          <Text style={styles.qrStatusDate}>
-                            Created {formatDate(qrCode.createdAt)}
-                          </Text>
-                        </View>
-                        <View style={styles.qrStatusBadge}>
-                          <View style={[styles.qrStatusDot, { backgroundColor: '#FF9500' }]} />
-                          <Text style={styles.qrStatusText}>Pending</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
-                      </View>
-                    </Card>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+            {/* Tabbed Purchase History */}
+            {(() => {
+              const completedTransactions = transactions.filter(t => t.status === 'SUCCESS');
+              return (
+                <View style={styles.qrStatusSection}>
+                  <View style={styles.tabContainer}>
+                    <TouchableOpacity
+                      style={[styles.tabButton, activeTab === 'pending' && styles.tabButtonActive]}
+                      onPress={() => setActiveTab('pending')}
+                    >
+                      <Text style={[styles.tabButtonText, activeTab === 'pending' && styles.tabButtonTextActive]}>
+                        Pending QR Codes ({getPendingQRCodes().length})
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.tabButton, activeTab === 'completed' && styles.tabButtonActive]}
+                      onPress={() => setActiveTab('completed')}
+                    >
+                      <Text style={[styles.tabButtonText, activeTab === 'completed' && styles.tabButtonTextActive]}>
+                        Completed ({completedTransactions.length})
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
 
-            {/* Quick Actions */}
-            <View style={styles.quickActionsContainer}>
-              {beneficiary.remainingBalance > 0 && (
-                <Button
-                  title="Generate QR Code"
-                  onPress={() => router.push('/(beneficiary)/qr-code')}
-                  style={styles.qrButton}
-                />
-              )}
-              <Button
-                title="Purchase Fuel"
-                onPress={() => router.push('/(beneficiary)/purchase')}
-                variant={beneficiary.remainingBalance > 0 ? 'outline' : 'primary'}
-                style={styles.purchaseButton}
-              />
-            </View>
+                  {activeTab === 'pending' ? (
+                    getPendingQRCodes().length > 0 ? (
+                      getPendingQRCodes().slice(0, 5).map((qrCode) => (
+                        <TouchableOpacity
+                          key={qrCode.id}
+                          onPress={() => router.push({
+                            pathname: '/(beneficiary)/qr-code',
+                            params: { qrId: qrCode.id }
+                          })}
+                          activeOpacity={0.7}
+                        >
+                          <Card style={styles.qrStatusCard}>
+                            <View style={styles.qrStatusContent}>
+                              <View style={[styles.qrStatusIconContainer, { backgroundColor: '#E3F2FD' }]}>
+                                <Ionicons name="qr-code" size={24} color={theme.primary} />
+                              </View>
+                              <View style={styles.qrStatusInfo}>
+                                <Text style={styles.qrStatusTitle}>
+                                  {qrCode.payload.mode === 'PAID' ? 'Paid Fuel QR' : 'Subsidized Fuel QR'}
+                                </Text>
+                                <Text style={styles.qrStatusDetails}>
+                                  {qrCode.payload.mode === 'PAID'
+                                    ? `${formatCurrency(qrCode.payload.paidAmount || 0)}`
+                                    : `${qrCode.payload.remainingAmount || 0} L`
+                                  } • {qrCode.payload.fuelType}
+                                </Text>
+                                <Text style={styles.qrStatusDate}>
+                                  Created {formatDate(qrCode.createdAt)}
+                                </Text>
+                              </View>
+                              <View style={styles.qrStatusBadge}>
+                                <View style={[styles.qrStatusDot, { backgroundColor: '#FF9500' }]} />
+                                <Text style={styles.qrStatusText}>Pending</Text>
+                              </View>
+                              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+                            </View>
+                          </Card>
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      <Card style={styles.emptyTabCard}>
+                        <Ionicons name="qr-code-outline" size={40} color="#8E8E93" style={styles.emptyTabIcon} />
+                        <Text style={styles.emptyTabTitle}>No Pending QR Codes</Text>
+                        <Text style={styles.emptyTabMessage}>
+                          Choose a fuel type above to make a purchase.
+                        </Text>
+                      </Card>
+                    )
+                  ) : (
+                    completedTransactions.length > 0 ? (
+                      completedTransactions.slice(0, 5).map((tx) => (
+                        <Card key={tx.id} style={styles.qrStatusCard}>
+                          <View style={styles.qrStatusContent}>
+                            <View style={[styles.qrStatusIconContainer, { backgroundColor: '#E8F8F5' }]}>
+                              <Ionicons name="checkmark-circle" size={24} color="#34C759" />
+                            </View>
+                            <View style={styles.qrStatusInfo}>
+                              <Text style={styles.qrStatusTitle}>
+                                {tx.fuelType.charAt(0) + tx.fuelType.slice(1).toLowerCase()} Dispensed
+                              </Text>
+                              <Text style={styles.qrStatusDetails}>
+                                {tx.liters.toFixed(1)} L • {tx.mode === 'SUBSIDY' ? 'Subsidized' : 'Paid'}
+                              </Text>
+                              <Text style={styles.qrStatusDate}>
+                                Dispensed {formatDate(tx.createdAt)}
+                              </Text>
+                            </View>
+                            <View style={[styles.qrStatusBadge, { backgroundColor: '#E8F8F5' }]}>
+                              <View style={[styles.qrStatusDot, { backgroundColor: '#34C759' }]} />
+                              <Text style={[styles.qrStatusText, { color: '#34C759' }]}>Done</Text>
+                            </View>
+                          </View>
+                        </Card>
+                      ))
+                    ) : (
+                      <Card style={styles.emptyTabCard}>
+                        <Ionicons name="receipt-outline" size={40} color="#8E8E93" style={styles.emptyTabIcon} />
+                        <Text style={styles.emptyTabTitle}>No Completed Purchases</Text>
+                        <Text style={styles.emptyTabMessage}>
+                          Completed fuel dispenses will show up here.
+                        </Text>
+                      </Card>
+                    )
+                  )}
+                </View>
+              );
+            })()}
           </>
         )}
 
@@ -372,30 +456,6 @@ export default function BeneficiaryDashboard() {
           </View>
         )}
 
-        {/* Quick Links */}
-        <View style={styles.quickLinksContainer}>
-          <TouchableOpacity
-            style={styles.quickLink}
-            onPress={() => router.push('/(beneficiary)/transactions')}
-          >
-            <Ionicons name="receipt" size={24} color={theme.primary} />
-            <Text style={[styles.quickLinkText, { color: theme.primary }]}>Transactions</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.quickLink}
-            onPress={() => router.push('/(beneficiary)/qr-code')}
-          >
-            <Ionicons name="qr-code" size={24} color={theme.primary} />
-            <Text style={[styles.quickLinkText, { color: theme.primary }]}>QR Code</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.quickLink}
-            onPress={() => router.push('/(beneficiary)/notifications')}
-          >
-            <Ionicons name="notifications" size={24} color={theme.primary} />
-            <Text style={styles.quickLinkText}>Notifications</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -814,5 +874,88 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#FF9500',
+  },
+  allocationDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginVertical: 16,
+  },
+  allocationDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  allocationDetailItem: {
+    flex: 1,
+  },
+  allocationDetailLabel: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    opacity: 0.8,
+    marginBottom: 4,
+  },
+  allocationDetailValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  allocationDetailDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginHorizontal: 16,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#E5E5EA',
+    borderRadius: 12,
+    padding: 2,
+    marginBottom: 16,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  tabButtonActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  tabButtonTextActive: {
+    color: '#000000',
+  },
+  emptyTabCard: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    borderColor: '#C7C7CC',
+  },
+  emptyTabIcon: {
+    marginBottom: 8,
+  },
+  emptyTabTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 4,
+  },
+  emptyTabMessage: {
+    fontSize: 14,
+    color: '#8E8E93',
+    textAlign: 'center',
   },
 });
